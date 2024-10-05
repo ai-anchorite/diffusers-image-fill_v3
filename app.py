@@ -17,6 +17,10 @@ MODELS = {
 DEVICE = devicetorch.get(torch)
 pipe = None
 global_image = None
+latest_result = None  # Added to store the latest result
+
+
+
 def init():
     global pipe
 
@@ -56,6 +60,7 @@ def init():
 
 #@spaces.GPU(duration=16)
 def fill_image(prompt, image, model_selection, guidance_scale, steps):
+    global latest_result  # Added to update the latest result
     init()
     source = image["background"]
     mask = image["layers"][0]
@@ -86,7 +91,7 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps):
 
     image = image.convert("RGBA")
     cnet_image.paste(image, (0, 0), binary_mask)
-
+    latest_result = cnet_image  # Store the latest result
     yield source, cnet_image
 
 
@@ -114,7 +119,15 @@ def resize(image, size):
     max = (w // 8) * 8
     return gr.update(value=source, canvas_size=(w,h)), gr.update(maximum=max, visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)
 
-
+# New function to send result back to input
+def send_to_input(result_slider):
+    if latest_result is not None and result_slider is not None:
+        global global_image
+        global_image = latest_result
+        return gr.update(value=latest_result), gr.update(value=None)
+    # If no result or result slider is empty, don't update anything
+    return gr.update(), gr.update()
+    
 #css = """
 #.gradio-container {
 #    width: 1024px !important;
@@ -148,10 +161,11 @@ with gr.Blocks(fill_width=True) as demo:
           value="RealVisXL V5.0 Lightning",
           label="Model",
       )
-      prompt = gr.Textbox(value="high quality", label="Prompt (Don't touch unless you know what you're doing)", visible=False)
-      size = gr.Slider(value=1024, label="Resize", minimum=0, maximum=1024, step=8, visible=False, interactive=True)
-      guidance_scale = gr.Number(value=1.5, label="Guidance Scale", visible=False)
-      steps = gr.Number(value=8, label="Steps", precision=0, visible=False)
+      prompt = gr.Textbox(value="high quality", label="Prompt (Don't touch unless you know what you're doing)", visible=True)
+      size = gr.Slider(value=1024, label="Resize", minimum=0, maximum=1024, step=8, visible=True, interactive=True)
+      guidance_scale = gr.Number(value=1.5, label="Guidance Scale", visible=True)
+      steps = gr.Number(value=8, label="Steps", precision=0, visible=True)
+      iterate_button = gr.Button("Send Result to Input")  # New button    
 
     run_button.click(
         fn=clear_result,
@@ -162,6 +176,14 @@ with gr.Blocks(fill_width=True) as demo:
         inputs=[prompt, input_image, model_selection, guidance_scale, steps],
         outputs=result,
     )
+    
+    # New click event for iterate button
+    iterate_button.click(
+        fn=send_to_input,
+        inputs=[result],  # Add result slider as input
+        outputs=[input_image, result],
+    )
+    
     input_image.upload(fn=set_img, inputs=input_image).then(fn=resize, inputs=[input_image, size], outputs=[input_image, size, guidance_scale, steps, prompt])
     size.change(fn=resize, inputs=[input_image, size], outputs=[input_image, size, guidance_scale, steps, prompt])
 

@@ -75,7 +75,7 @@ module.exports = {
           default: true,
           icon: 'fa-solid fa-terminal',
           text: "Resetting",
-          href: "reset.js",
+          href: "reset.js",confirm:"Are you sure you wish to reset this app?"
         }]
       } else {
         return [{
@@ -95,6 +95,10 @@ module.exports = {
           icon: "fa-solid fa-plug",
           text: "Install",
           href: "install.js",
+        }, {
+          icon: "fa-regular fa-circle-xmark",
+          text: "Reset",
+		  href: "reset.js",confirm:"Are you sure you wish to reset this app?"
         }]
       }
     } else {

@@ -401,7 +401,7 @@ with gr.Blocks(css=css) as demo:
         fn=loop_outpainting,
         inputs=input_image,
         outputs=video_output,
-        cache_examples="lazy",
+        #cache_examples="lazy",
     )
 
     def use_output_as_input(output_image):

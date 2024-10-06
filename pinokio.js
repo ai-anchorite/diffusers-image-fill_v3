@@ -2,10 +2,10 @@ const path = require('path')
 module.exports = {
   version: "2.0",
   title: "diffusers-image-fill",
-  description: "Inpaint or Remove objects from an image - https://huggingface.co/spaces/OzzyGT/diffusers-image-fill - or Outpaint - https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint",
+  description: "Inpaint or Remove objects from an image - https://huggingface.co/spaces/OzzyGT/diffusers-image-fill - or Outpaint - https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint - or Outpaint Video Zoom - https://huggingface.co/spaces/multimodalart/outpaint-video-zoom",
   icon: "icon.gif",
   menu: async (kernel, info) => {
-    let installed = info.exists("env")
+    let installed = info.exists("cache")
     let running = {
       install: info.running("install.js"),
       start: info.running("start.js"),
@@ -122,6 +122,10 @@ module.exports = {
           icon: "fa-solid fa-plug",
           text: "Install",
           href: "install.js",
+		}, {
+		  icon: 'fa-solid fa-folder',
+	      text: "Output Folder",
+		  href: "outputs?fs",
         }, {
           icon: "fa-regular fa-circle-xmark",
           text: "Delete Gradio Cache",

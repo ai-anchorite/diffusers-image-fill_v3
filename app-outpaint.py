@@ -284,7 +284,7 @@ with gr.Blocks(fill_width=True) as demo:
                         label="Alignment"
                     )
 
-                with gr.Accordion(label="Advanced settings", open=False) as settings_panel:
+                with gr.Accordion(label="Advanced settings", open=True) as settings_panel:
                     with gr.Column():
                         with gr.Row():
                             width_slider = gr.Slider(

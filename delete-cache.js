@@ -2,7 +2,7 @@ module.exports = {
   run: [{
     method: "fs.rm",
     params: {
-      path: "app"
+      path: "cache\\GRADIO_TEMP_DIR"
     }
   }]
 }

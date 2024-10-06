@@ -1,5 +1,3 @@
-torch
-spaces
 gradio==4.42.0
 gradio-imageslider
 numpy==1.26.4

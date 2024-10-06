@@ -34,6 +34,11 @@ module.exports = {
             icon: 'fa-solid fa-terminal',
             text: "Terminal",
             href: "start.js",
+		  }, {
+	        icon: "fa-regular fa-circle-xmark",
+			text: "Delete Gradio Image Cache",
+			href: "delete-cache.js",
+			confirm:"Are you sure you wish to delete the Gradio Image cache?"			
           }]
         } else {
           return [{
@@ -55,6 +60,11 @@ module.exports = {
             icon: 'fa-solid fa-terminal',
             text: "Terminal",
             href: "start-outpaint.js",
+		  }, {
+	        icon: "fa-regular fa-circle-xmark",
+			text: "Delete Gradio Image Cache",
+			href: "delete-cache.js",
+			confirm:"Are you sure you wish to delete the Gradio Image cache?"				
           }]
         } else {
           return [{
@@ -76,6 +86,11 @@ module.exports = {
             icon: 'fa-solid fa-terminal',
             text: "Terminal",
             href: "start-zoom.js",
+		  }, {
+	        icon: "fa-regular fa-circle-xmark",
+			text: "Delete Gradio Image Cache",
+			href: "delete-cache.js",
+			confirm:"Are you sure you wish to delete the Gradio Image cache?"
           }]
         } else {
           return [{
@@ -96,9 +111,8 @@ module.exports = {
         return [{
           default: true,
           icon: 'fa-solid fa-terminal',
-          text: "Deleting Gradio Cache",
+          text: "Deleting Gradio Image Cache",
           href: "delete-cache.js",
-          confirm:"Are you sure you wish to delete the Gradio cache?"
         }]
       } else {
         return [{
@@ -118,15 +132,16 @@ module.exports = {
           icon: "fa-solid fa-plug",
           text: "Update",
           href: "update.js",
+		  confirm:"Are you sure you wish to update this app?"
         }, {
+          icon: "fa-regular fa-circle-xmark",
+          text: "Delete Gradio Image Cache",
+          href: "delete-cache.js",
+          confirm:"Are you sure you wish to delete the Gradio Image cache?"
+		}, {
 		  icon: 'fa-solid fa-folder',
 	      text: "Output Folder",
 		  href: "outputs?fs",
-        }, {
-          icon: "fa-regular fa-circle-xmark",
-          text: "Delete Gradio Cache",
-          href: "delete-cache.js",
-          confirm:"Are you sure you wish to delete the Gradio cache?"
         }]
       }
     } else {

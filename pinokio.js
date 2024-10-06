@@ -5,7 +5,7 @@ module.exports = {
   description: "Inpaint or Remove objects from an image - https://huggingface.co/spaces/OzzyGT/diffusers-image-fill - or Outpaint - https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint - or Outpaint Video Zoom - https://huggingface.co/spaces/multimodalart/outpaint-video-zoom",
   icon: "icon.gif",
   menu: async (kernel, info) => {
-    let installed = info.exists("cache")
+    let installed = info.exists(__dirname,"cache")
     let running = {
       install: info.running("install.js"),
       start: info.running("start.js"),
@@ -119,10 +119,6 @@ module.exports = {
           text: "Update",
           href: "update.js",
         }, {
-          icon: "fa-solid fa-plug",
-          text: "Install",
-          href: "install.js",
-		}, {
 		  icon: 'fa-solid fa-folder',
 	      text: "Output Folder",
 		  href: "outputs?fs",

@@ -107,7 +107,6 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
     image_path = save_output(latest_result, auto_save)
     if image_path:
         full_path = os.path.abspath(image_path)
-        # print(f"Image {'saved as' if auto_save else 'auto-save is disabled, but assigned filename'}: {new_filename}")
     else:
         print("Error handling image output")
 
@@ -115,7 +114,7 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
     yield source, latest_result
 
    
-def save_output(latest_result, auto_save):  # Add auto_save parameter here
+def save_output(latest_result, auto_save): 
     try:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         current_time = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -128,7 +127,7 @@ def save_output(latest_result, auto_save):  # Add auto_save parameter here
         else:
             print(f"Auto-save disabled, but image assigned filename: {new_filename}")
         
-        return full_path  # Always return the path, whether saved or not
+        return full_path 
     except Exception as e:
         print(f"Error handling image path/save: {e}")
         return None

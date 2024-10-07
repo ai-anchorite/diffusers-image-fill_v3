@@ -64,7 +64,7 @@ def init():
         pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
 
 
-def fill_image(prompt, image, model_selection, guidance_scale, steps):
+def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save):
     global latest_result 
     init()
     source = image["background"]
@@ -88,34 +88,49 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps):
         negative_prompt_embeds=negative_prompt_embeds,
         pooled_prompt_embeds=pooled_prompt_embeds,
         negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
-        image=cnet_image,
         guidance_scale=guidance_scale,
         num_inference_steps=steps,
+        image=cnet_image,
     ):
+        
         yield image, cnet_image
+        
+    if paste_back:
+        image = image.convert("RGBA")
+        cnet_image.paste(image, (0, 0), binary_mask)
+        latest_result = cnet_image  
+    else:
+        latest_result = image.convert("RGBA")
 
-    image = image.convert("RGBA")
-    cnet_image.paste(image, (0, 0), binary_mask)
-    latest_result = cnet_image  
-    
-    # Save the output image and store the full path to use for gallery
-    saved_filename = save_output(latest_result)    
-    full_path = os.path.abspath(saved_filename)
-    print(f"Image saved as: {full_path}")
-    
-    yield source, cnet_image
+    yield source, latest_result       
 
+    image_path = save_output(latest_result, auto_save)
+    if image_path:
+        full_path = os.path.abspath(image_path)
+        # print(f"Image {'saved as' if auto_save else 'auto-save is disabled, but assigned filename'}: {new_filename}")
+    else:
+        print("Error handling image output")
 
-def save_output(latest_result):
+   
+    yield source, latest_result
+
+   
+def save_output(latest_result, auto_save):  # Add auto_save parameter here
     try:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         current_time = datetime.now().strftime("%Y%m%d%H%M%S")
         new_filename = f"img_{current_time}.png"
-        full_path = os.path.join("outputs", new_filename)
-        latest_result.save(full_path)
-        return full_path
+        full_path = os.path.join(OUTPUT_DIR, new_filename)
+        
+        if auto_save:
+            latest_result.save(full_path)
+            print(f"Image saved as: {full_path}")
+        else:
+            print(f"Auto-save disabled, but image assigned filename: {new_filename}")
+        
+        return full_path  # Always return the path, whether saved or not
     except Exception as e:
-        print(f"Error saving image: {e}")
+        print(f"Error handling image path/save: {e}")
         return None
         
 def open_outputs_folder():
@@ -176,7 +191,9 @@ with gr.Blocks(fill_width=True) as demo:
         )
         
     with gr.Row():
-        run_button = gr.Button("Generate")
+        run_button = gr.Button("Generate", scale=3)
+        paste_back = gr.Checkbox(True, label="Paste back original", scale=1)
+        auto_save = gr.Checkbox(True, label="Autosave all results", scale=1)
         
     with gr.Row():
         model_selection = gr.Dropdown(
@@ -192,10 +209,10 @@ with gr.Blocks(fill_width=True) as demo:
     with gr.Row():   
         open_folder_button = gr.Button("Open Outputs Folder")
         console_info = gr.Textbox(label="Console", interactive=False) 
-        iterate_button = gr.Button("Send Result to Input")  # New button  
+        result_to_input = gr.Button("Send Result to Input")  
 
     run_button.click(
-        fn=lambda: "Clearing previous result...",
+        fn=lambda: "Preparing Image Generation...",
         inputs=None,
         outputs=console_info,
     ).then(
@@ -204,13 +221,11 @@ with gr.Blocks(fill_width=True) as demo:
         outputs=result,
     ).then(
         fn=fill_image,
-        inputs=[prompt, input_image, model_selection, guidance_scale, steps],
-        outputs=result #add generating image msg
-
+        inputs=[prompt, input_image, model_selection, guidance_scale, steps, paste_back, auto_save],
+        outputs=result
     )
     
-    # New click event for iterate button
-    iterate_button.click(
+    result_to_input.click(
         fn=send_to_input,
         inputs=[result], 
         outputs=[input_image, result],
@@ -222,9 +237,20 @@ with gr.Blocks(fill_width=True) as demo:
         outputs=console_info
     )
 
+    input_image.upload(
+        fn=set_img,
+        inputs=input_image
+    ).then(
+        fn=resize, 
+        inputs=[input_image, size], 
+        outputs=[input_image, size, guidance_scale, steps, prompt]
+    )
     
-    input_image.upload(fn=set_img, inputs=input_image).then(fn=resize, inputs=[input_image, size], outputs=[input_image, size, guidance_scale, steps, prompt])
-    size.change(fn=resize, inputs=[input_image, size], outputs=[input_image, size, guidance_scale, steps, prompt])
+    size.change(
+        fn=resize, 
+        inputs=[input_image, size], 
+        outputs=[input_image, size, guidance_scale, steps, prompt]
+    )
 
 
 demo.launch(share=False)

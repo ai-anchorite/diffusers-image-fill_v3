@@ -12,6 +12,7 @@ from diffusers.models.model_loading_utils import load_state_dict
 from controlnet_union import ControlNetModel_Union
 from pipeline_fill_sd_xl import StableDiffusionXLFillPipeline
 
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from PIL import Image
@@ -20,12 +21,14 @@ MODELS = {
     "RealVisXL V5.0 Lightning": "SG161222/RealVisXL_V5.0_Lightning",
 }
 DEVICE = devicetorch.get(torch)
+MAX_GALLERY_IMAGES = 20 
 OUTPUT_DIR = "outputs" 
 
 pipe = None
 global_image = None
 latest_result = None
-
+gallery_images = deque(maxlen=MAX_GALLERY_IMAGES)
+selected_gallery_image = None
 
 def init():
     global pipe
@@ -65,7 +68,7 @@ def init():
 
 
 def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save):
-    global latest_result 
+    global latest_result, gallery_images 
     init()
     source = image["background"]
     mask = image["layers"][0]
@@ -92,28 +95,26 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
         num_inference_steps=steps,
         image=cnet_image,
     ):
-        
-        yield image, cnet_image
-        
+
+        yield (image, cnet_image), None
+
     if paste_back:
         image = image.convert("RGBA")
         cnet_image.paste(image, (0, 0), binary_mask)
-        latest_result = cnet_image  
+        latest_result = cnet_image
     else:
         latest_result = image.convert("RGBA")
 
-    yield source, latest_result       
+    # Use original save_output function
+    save_path, filename = save_output(latest_result, auto_save)
+    
+    # Add to gallery
+    gallery_images.append((latest_result, filename))
+    gallery_update = [(img, fname) for img, fname in gallery_images]
 
-    image_path = save_output(latest_result, auto_save)
-    if image_path:
-        full_path = os.path.abspath(image_path)
-    else:
-        print("Error handling image output")
+    # Final yield with the completed image
+    yield (source, latest_result), gallery_update
 
-   
-    yield source, latest_result
-
-   
 def save_output(latest_result, auto_save): 
     try:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -123,15 +124,37 @@ def save_output(latest_result, auto_save):
         
         if auto_save:
             latest_result.save(full_path)
-            print(f"Image saved as: {full_path}")
+            print(f"Image auto-saved as: {full_path}")
+            return full_path, new_filename
         else:
-            print(f"Auto-save disabled, but image assigned filename: {new_filename}")
-        
-        return full_path 
+            print(f"Auto-save disabled, assigned filename: {new_filename}")
+            return None, new_filename
     except Exception as e:
         print(f"Error handling image path/save: {e}")
-        return None
+        return None, None
+
+def save_selected_image():
+    global selected_gallery_image
+    if selected_gallery_image is None:
+        return "Please select an image first"
         
+    for image, filename in gallery_images:
+        if filename == selected_gallery_image:
+            try:
+                os.makedirs(OUTPUT_DIR, exist_ok=True)
+                full_path = os.path.join(OUTPUT_DIR, filename)
+                image.save(full_path)
+                return f"Image saved as: {filename}"
+            except Exception as e:
+                return f"Error saving image: {str(e)}"
+    return "Selected image no longer in gallery"
+
+def clear_gallery():
+    global gallery_images, selected_gallery_image
+    gallery_images.clear()
+    selected_gallery_image = None
+    return gr.update(value=None), gr.update(visible=False), gr.update(value=None)
+  
 def open_outputs_folder():
     try:
         # Ensure the outputs directory exists
@@ -144,6 +167,15 @@ def open_outputs_folder():
     
 def clear_result():
     return gr.update(value=None)
+
+def select_gallery_image(evt: gr.SelectData):
+    global selected_gallery_image
+    if evt.index < len(gallery_images):
+        _, filename = list(gallery_images)[evt.index]
+        selected_gallery_image = filename
+        return f"Selected image: {filename}", gr.update(visible=True)
+    return "Invalid selection", gr.update(visible=False)
+
 
 def set_img(image):
     global global_image
@@ -184,7 +216,6 @@ with gr.Blocks(fill_width=True) as demo:
         )
 
         result = ImageSlider(
-            show_download_button=False,
             interactive=False,
             label="Generated Image",
         )
@@ -200,16 +231,35 @@ with gr.Blocks(fill_width=True) as demo:
             value="RealVisXL V5.0 Lightning",
             label="Model",
         )
-        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (Only required for inpainting)", visible=True)
+        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (for adding details via inpaint)", visible=True)
         size = gr.Slider(value=1024, label="Resize", minimum=0, maximum=1024, step=8, visible=True, interactive=True)
-        guidance_scale = gr.Number(value=1.5, label="Guidance Scale", visible=True)
+        guidance_scale = gr.Number(value=1.5, label="Guidance Scale", minimum=1.5, maximum=8, step=0.5, visible=True)
         steps = gr.Number(value=8, label="Steps", precision=0, visible=True)
         
     with gr.Row():   
         open_folder_button = gr.Button("Open Outputs Folder")
         console_info = gr.Textbox(label="Console", interactive=False) 
         result_to_input = gr.Button("Send Result to Input")  
-
+        
+    with gr.Row():
+        gallery = gr.Gallery(
+            label=f"Image Gallery (most recent {MAX_GALLERY_IMAGES} images)",
+            show_label=True,
+            elem_id="gallery",
+            preview=True,
+            object_fit="contain",
+            columns=5,
+            height=400,
+            show_download_button=False
+        )
+        
+    with gr.Row():    
+        clear_gallery_btn = gr.Button("Clear Gallery", scale=1)
+        save_selected_btn = gr.Button("Save Selected", visible=True)
+        gallery_status = gr.Textbox(label="Gallery Status", interactive=False)
+   
+   
+    # event handlers        
     run_button.click(
         fn=lambda: "Preparing Image Generation...",
         inputs=None,
@@ -221,7 +271,22 @@ with gr.Blocks(fill_width=True) as demo:
     ).then(
         fn=fill_image,
         inputs=[prompt, input_image, model_selection, guidance_scale, steps, paste_back, auto_save],
-        outputs=result
+        outputs=[result, gallery]
+    )
+
+    gallery.select(
+        fn=select_gallery_image,
+        outputs=[gallery_status, save_selected_btn]
+    )
+    
+    save_selected_btn.click(
+        fn=save_selected_image,
+        outputs=gallery_status
+    )
+    
+    clear_gallery_btn.click(
+        fn=clear_gallery,
+        outputs=[gallery, save_selected_btn, gallery_status]
     )
     
     result_to_input.click(

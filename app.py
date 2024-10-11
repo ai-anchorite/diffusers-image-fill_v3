@@ -4,6 +4,7 @@ import devicetorch
 import os
 import webbrowser
 import math
+import gc
 
 from diffusers import AutoencoderKL, TCDScheduler
 from diffusers.models.model_loading_utils import load_state_dict
@@ -29,9 +30,6 @@ MIN_IMAGE_SIZE = 512
 OUTPUT_DIR = "outputs" 
 VAE_SCALE_FACTOR = 8
 
-last_resize_time = 0
-RESIZE_COOLDOWN = 0.5  # Seconds
-
 pipe = None
 global_image = None
 global_original_image = None 
@@ -39,11 +37,13 @@ latest_result = None
 gallery_images = deque(maxlen=MAX_GALLERY_IMAGES)
 selected_gallery_image = None
 
-def init():
+def init(progress=gr.Progress()):
     global pipe
 
     if pipe is None:
+        progress(0.1, desc="Starting model initialization")
         
+        progress(0.2, desc="Loading ControlNet configuration")
         config_file = hf_hub_download(
             "xinsir/controlnet-union-sdxl-1.0",
             filename="config_promax.json",
@@ -51,20 +51,26 @@ def init():
 
         config = ControlNetModel_Union.load_config(config_file)
         controlnet_model = ControlNetModel_Union.from_config(config)
+        
+        progress(0.3, desc="Downloading ControlNet model")
         model_file = hf_hub_download(
             "xinsir/controlnet-union-sdxl-1.0",
             filename="diffusion_pytorch_model_promax.safetensors",
         )
+        
+        progress(0.4, desc="Loading ControlNet model")
         state_dict = load_state_dict(model_file)
         model, _, _, _, _ = ControlNetModel_Union._load_pretrained_model(
             controlnet_model, state_dict, model_file, "xinsir/controlnet-union-sdxl-1.0"
         )
         model.to(device=DEVICE, dtype=torch.float16)
 
+        progress(0.6, desc="Loading VAE")
         vae = AutoencoderKL.from_pretrained(
             "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
         ).to(DEVICE)
 
+        progress(0.8, desc="Loading main pipeline")
         pipe = StableDiffusionXLFillPipeline.from_pretrained(
             "SG161222/RealVisXL_V5.0_Lightning",
             torch_dtype=torch.float16,
@@ -73,13 +79,84 @@ def init():
             variant="fp16",
         ).to(DEVICE)
 
+        progress(0.9, desc="Setting up scheduler")
         pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
 
+        progress(1.0, desc="Model loading complete")
+        return "Model loaded successfully."
+    else:
+        # If the model is already loaded, return None instead of a message
+        return None
 
+def cleanup_tensors():
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    gc.collect()
+    
+# def unload_vram(progress=gr.Progress()):
+    # global pipe, vae, controlnet_model
+    
+    # progress(0.1, desc="Starting VRAM unload process")
+
+    # if pipe is not None:
+        # progress(0.3, desc="Offloading UNet to CPU")
+        # pipe.unet.to('cpu')
+        
+        # progress(0.5, desc="Offloading VAE to CPU")
+        # pipe.vae.to('cpu')
+        
+        # progress(0.7, desc="Offloading ControlNet to CPU")
+        # pipe.controlnet.to('cpu')
+
+    # if torch.cuda.is_available():
+        # progress(0.8, desc="Clearing CUDA cache")
+        # torch.cuda.empty_cache()
+
+    # progress(0.9, desc="Forcing garbage collection")
+    # gc.collect()
+
+    # progress(1.0, desc="VRAM unload complete")
+    # return "Large model components offloaded from VRAM to system RAM. Ready for quick redeployment."
+    
+
+def unload_all(progress=gr.Progress()):
+    global pipe, vae, controlnet_model
+    
+    progress(0.1, desc="Starting complete unload process")
+
+    try:
+        # Unload pipeline
+        if pipe is not None:
+            for component in ['unet', 'vae', 'controlnet', 'text_encoder', 'text_encoder_2']:
+                if hasattr(pipe, component):
+                    delattr(pipe, component)
+            del pipe
+            pipe = None
+
+        # Unload standalone components
+        if 'vae' in globals() and vae is not None:
+            del vae
+            vae = None
+
+        if 'controlnet_model' in globals() and controlnet_model is not None:
+            del controlnet_model
+            controlnet_model = None
+
+        # Clear any remaining CUDA cache
+        cleanup_tensors()
+
+        progress(1.0, desc="Unload complete")
+        return "All models completely unloaded from VRAM. The app will reload models when needed."
+    except Exception as e:
+        progress(1.0, desc="Unload failed")
+        return f"Error during unload process: {str(e)}"
+
+   
 def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images):
     global latest_result, gallery_images, global_image
     init()
-    source = global_image  # Use the current global_image instead of image["background"]
+    source = global_image 
     mask = image["layers"][0]
 
     # Ensure source image meets size requirements
@@ -105,7 +182,6 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
     for n in range(num_images):
         intermediate_images = []
         
-        # Use source image when updating console
         f"Starting generation of image {n+1} of {num_images}..."
         
         for image in pipe(
@@ -136,9 +212,11 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
       
         gallery_update = [(img, fname) for img, fname in gallery_images]
         yield (source, result_image), gallery_update, f"Completed image {n+1} of {num_images}"
+        
 
     latest_result = all_results[-1]
     yield (source, latest_result), gallery_update, "All images generated successfully!"
+    cleanup_tensors()
 
 
 def save_output(latest_result, auto_save): 
@@ -414,6 +492,7 @@ def send_to_input(result_slider):
     return gr.update(), gr.update()
     
 
+
 with gr.Blocks(fill_width=True) as demo:
     with gr.Row():
         input_image = gr.ImageMask(
@@ -433,7 +512,8 @@ with gr.Blocks(fill_width=True) as demo:
         num_images = gr.Slider(value=1, label="Number of Images", minimum=1,maximum=10, step=1, scale=2)
         paste_back = gr.Checkbox(True, label="Paste back original background", scale=1)
         auto_save = gr.Checkbox(True, label="Autosave all results", scale=1)
-        unload_model = gr.Button("Unload all (placeholder work-in-progress)", variant="primary", size = "sm")
+        # unload_vram_btn = gr.Button("Unload VRAM", variant="primary", size = "sm")
+        unload_all_btn = gr.Button("Unload all Models", variant="primary", size = "sm")
         
     with gr.Row():
         model_selection = gr.Dropdown(
@@ -463,7 +543,7 @@ with gr.Blocks(fill_width=True) as demo:
             label=f"Image Gallery (most recent {MAX_GALLERY_IMAGES} images)",
             show_label=True,
             elem_id="gallery",
-            preview=False,  # Start with preview disabled
+            preview=False,
             object_fit="contain",
             columns=5,
             height=400,
@@ -483,9 +563,9 @@ with gr.Blocks(fill_width=True) as demo:
         inputs=None,
         outputs=console_info,
     ).then(
-        fn=clear_result,
+        fn=init,
         inputs=None,
-        outputs=result,
+        outputs=console_info
     ).then(
         fn=fill_image,
         inputs=[prompt, input_image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images],
@@ -541,5 +621,10 @@ with gr.Blocks(fill_width=True) as demo:
         inputs=[resize_slider],
         outputs=[input_image, console_info]
     )
- 
+
+    unload_all_btn.click(
+        fn=unload_all,
+        outputs=[console_info]
+    )
+     
 demo.launch(share=False)

@@ -223,7 +223,7 @@ def save_output(latest_result, auto_save):
     try:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         current_time = datetime.now().strftime("%Y%m%d%H%M%S")
-        new_filename = f"img_{current_time}.png"
+        new_filename = f"inp_{current_time}.png"
         full_path = os.path.join(OUTPUT_DIR, new_filename)
         
         if auto_save:
@@ -244,7 +244,7 @@ def save_selected_image():
         return "Please select an image first"
         
     for image, filename in gallery_images:
-        if filename == selected_gallery_image:
+        if image == selected_gallery_image:
             try:
                 os.makedirs(OUTPUT_DIR, exist_ok=True)
                 full_path = os.path.join(OUTPUT_DIR, filename)
@@ -295,12 +295,6 @@ def send_selected_to_input():
             # Update resize controls for the new image
             resize_slider_update, resize_button_update, console_info_update = update_resize_controls({"background": global_image})
             
-            # Always set to 100% if resize options are available
-            if isinstance(resize_slider_update, dict) and 'choices' in resize_slider_update and resize_slider_update['choices']:
-                resize_slider_update = gr.update(value=100, choices=resize_slider_update['choices'], interactive=True)
-            else:
-                resize_slider_update = gr.update(value=None, choices=[], interactive=False)
-            
             return (
                 gr.update(value=global_image),  # Update input image
                 resize_slider_update,  # Update resize slider options and value
@@ -313,7 +307,7 @@ def send_selected_to_input():
     except Exception as e:
         print(f"Error sending image to input: {str(e)}")
         return gr.update(), gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), gr.update(), f"Error sending image to input: {str(e)}"
-    
+
     
 def set_img(image, size_slider):
     global global_image
@@ -350,8 +344,10 @@ def preview_resize(percentage):
     global global_image, global_original_image
     if global_original_image is None:
         return "No image loaded. Please upload an image first."
-    if percentage is None:
-        return "No resize options available. The image is already at the minimum allowed size."
+    
+    if percentage == 100:
+        _, _, info_text = update_resize_controls({"background": global_original_image})
+        return info_text
     
     original_w, original_h = global_original_image.size
     current_w, current_h = global_image.size
@@ -426,16 +422,20 @@ def calculate_resize_options(image):
     
     return sorted(valid_options, reverse=True)
 
+
 def update_resize_controls(image):
     global global_image, global_original_image
-    if image is None or image["background"] is None:
+    if image is None or (isinstance(image, dict) and image.get("background") is None):
         return (
             gr.update(value=None, choices=[], interactive=False),
             gr.update(interactive=False),
             "No image loaded. Please upload an image."
         )
     
-    global_original_image = image["background"].copy()
+    if isinstance(image, dict):
+        image = image["background"]
+    
+    global_original_image = image.copy()
     global_image = global_original_image.copy()
     
     width, height = global_original_image.size
@@ -444,33 +444,28 @@ def update_resize_controls(image):
     
     resize_options = calculate_resize_options(global_original_image)
     
-    if not resize_options:
-        info_text = f"""
-<p><span style="color: #FF8C00; font-weight: bold;">Current size:</span> {width}x{height}</p>
-<p><span style="color: #FF6347;">No resize options available. Image is at the minimum allowed size.</span></p>
-<p><span style="color: #9932CC;">Estimated VRAM usage: {estimated_vram:.1f}GB</span></p>
-<p><span style="color: #1E90FF;">Minimum allowed size: {MIN_IMAGE_SIZE} pixels for the smallest dimension</p>
-"""
-        dropdown_update = gr.update(value=None, choices=[], interactive=False)
-    else:
-        info_text = f"""
+    # Always include 100% in the choices
+    if 100 not in resize_options:
+        resize_options = [100] + resize_options
+    
+    info_text = f"""
 <p><span style="color: #FF8C00; font-weight: bold;">Current size:</span> {width}x{height}</p>
 <p><span style="color: #4CAF50;">Available resize options: {", ".join(f"{opt}%" for opt in resize_options)}</span></p>
 <p><span style="color: #9932CC;">Estimated VRAM usage: {estimated_vram:.1f}GB</span></p>
 <p><span style="color: #1E90FF;">Minimum allowed size: {MIN_IMAGE_SIZE} pixels for the smallest dimension</p>
 """
-        dropdown_update = gr.update(value=resize_options[0], choices=resize_options, interactive=True)
     
     return (
-        dropdown_update,
+        gr.update(value=100, choices=resize_options, interactive=True),
         gr.update(interactive=bool(resize_options)),
         info_text
     )
+    
 
 def apply_resize(percentage):
     global global_image, global_original_image
     if global_original_image is None:
-        return None, "No image loaded"
+        return None, "No image loaded", gr.update(), gr.update()
     
     original_w, original_h = global_original_image.size
     new_w = ((original_w * percentage) // 100 // VAE_SCALE_FACTOR) * VAE_SCALE_FACTOR
@@ -478,26 +473,49 @@ def apply_resize(percentage):
     
     if percentage == 100:
         global_image = global_original_image.copy()
-        return global_image, f"Image restored to original copy: <span style=\"color: #3498DB;\">{original_w}x{original_h}</span>"
+        message = f"Image restored to original copy: <span style=\"color: #3498DB;\">{original_w}x{original_h}</span>"
     else:
         global_image = global_original_image.resize((new_w, new_h), Image.LANCZOS)
-        return global_image, f"Image resized to <span style=\"color: #3498DB;\">{new_w}x{new_h}</span>"
+        message = f"Image resized to <span style=\"color: #3498DB;\">{new_w}x{new_h}</span>"
+
+    resize_slider, resize_button, info = update_resize_controls({"background": global_image})
+    
+    return global_image, message + "<br>" + info, resize_slider, resize_button
 
 
 def send_to_input(result_slider):
     if latest_result is not None and result_slider is not None:
         global global_image
         global_image = latest_result
-        return gr.update(value=latest_result), gr.update(value=None)
-    return gr.update(), gr.update()
+        resize_slider, resize_button, info = update_resize_controls({"background": latest_result})
+        return gr.update(value=latest_result), gr.update(value=None), resize_slider, resize_button, info
+    return gr.update(), gr.update(), gr.update(), gr.update(), "No result to send to input"
+
     
+    
+def handle_image_upload(image):
+    if image is None:
+        return gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), "No image loaded. Please upload an image."
+    
+    # Process the image
+    resize_slider, resize_button, info = update_resize_controls(image)
+    return resize_slider, resize_button, info
+    
+    
+    
+title = """
+<div style="text-align: center; padding: 5px;">
+    <h1 style="margin-bottom: 5px;">Diffusers Image Inpaint/Remove</h1>
+    <p>Drop an image you would like to edit. Draw a mask with the Draw Tool and hit Generate to remove. Use prompting for inpainting to add.</p>
+</div>
+"""
 
-
-with gr.Blocks(fill_width=True) as demo:
+with gr.Blocks() as demo:
+    gr.HTML(title)
     with gr.Row():
         input_image = gr.ImageMask(
             type="pil",
-            label="Input Image",
+            label="Load an image and draw a mask with the Draw Tool",
             layers=False,
             sources=["upload"],
         )
@@ -508,36 +526,38 @@ with gr.Blocks(fill_width=True) as demo:
         )
         
     with gr.Row(variant = "compact"):
-        run_button = gr.Button("Generate", scale=3)
+        run_button = gr.Button("Generate", variant="primary", scale=3)
         num_images = gr.Slider(value=1, label="Number of Images", minimum=1,maximum=10, step=1, scale=2)
         paste_back = gr.Checkbox(True, label="Paste back original background", scale=1)
         auto_save = gr.Checkbox(True, label="Autosave all results", scale=1)
         # unload_vram_btn = gr.Button("Unload VRAM", variant="primary", size = "sm")
-        unload_all_btn = gr.Button("Unload all Models", variant="primary", size = "sm")
+        unload_all_btn = gr.Button("Unload all Models", variant="stop", size = "sm")
         
     with gr.Row():
         model_selection = gr.Dropdown(
             choices=list(MODELS.keys()),
             value="RealVisXL V5.0 Lightning",
             label="Model",
+            scale=2
         )
-        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (for adding details via inpaint)", visible=True)
+        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (for adding details via inpaint)", scale=2, visible=True)
 
         resize_slider = gr.Dropdown(
             choices=[],
             value=None,
             label="Resize Options (%)",
+            scale=1,
             interactive=False
         )
-        resize_button = gr.Button("Apply Resize", interactive=False)
-        guidance_scale = gr.Number(value=1.5, label="Guidance Scale", minimum=1.5, maximum=8, step=0.5, visible=True)
-        steps = gr.Number(value=8, label="Steps", precision=0, visible=True)
+        resize_button = gr.Button("Apply Resize", scale=1, size="sm", interactive=False)
+        guidance_scale = gr.Slider(value=1.5, label="Guidance Scale", minimum=1.5, maximum=8, step=0.5, scale=1)
+        steps = gr.Slider(value=8, label="Steps", minimum=1, maximum=16, step=1, visible=True, scale=1)
         
     with gr.Row(variant="compact"):   
         open_folder_button = gr.Button("Open Outputs Folder", variant="secondary")
         console_info = gr.HTML(label="Console")
-        result_to_input = gr.Button("Send Result to Input", variant="secondary")
-        
+        result_to_input = gr.Button("Send Result to Input")
+    gr.Markdown("---")     
     with gr.Row():
         gallery = gr.Gallery(
             label=f"Image Gallery (most recent {MAX_GALLERY_IMAGES} images)",
@@ -546,7 +566,7 @@ with gr.Blocks(fill_width=True) as demo:
             preview=False,
             object_fit="contain",
             columns=5,
-            height=400,
+            #height=400,
             show_download_button=False
         )
         
@@ -590,7 +610,7 @@ with gr.Blocks(fill_width=True) as demo:
     result_to_input.click(
         fn=send_to_input,
         inputs=[result], 
-        outputs=[input_image, result],
+        outputs=[input_image, result, resize_slider, resize_button, console_info],
     )
     
     send_gallery_to_input_btn.click(
@@ -605,7 +625,7 @@ with gr.Blocks(fill_width=True) as demo:
     )
 
     input_image.upload(
-        fn=update_resize_controls,
+        fn=handle_image_upload,
         inputs=[input_image],
         outputs=[resize_slider, resize_button, console_info]
     )
@@ -619,7 +639,7 @@ with gr.Blocks(fill_width=True) as demo:
     resize_button.click(
         fn=apply_resize,
         inputs=[resize_slider],
-        outputs=[input_image, console_info]
+        outputs=[input_image, console_info, resize_slider, resize_button]
     )
 
     unload_all_btn.click(

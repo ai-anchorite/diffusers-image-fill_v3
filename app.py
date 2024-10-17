@@ -37,6 +37,7 @@ latest_result = None
 gallery_images = deque(maxlen=MAX_GALLERY_IMAGES)
 selected_gallery_image = None
 
+
 def init(progress=gr.Progress()):
     global pipe
 
@@ -48,7 +49,6 @@ def init(progress=gr.Progress()):
             "xinsir/controlnet-union-sdxl-1.0",
             filename="config_promax.json",
         )
-
         config = ControlNetModel_Union.load_config(config_file)
         controlnet_model = ControlNetModel_Union.from_config(config)
         
@@ -123,7 +123,7 @@ def cleanup_tensors():
 def unload_all(progress=gr.Progress()):
     global pipe, vae, controlnet_model
     
-    progress(0.1, desc="Starting complete unload process")
+    progress(0.1, desc="Starting VRAM unload process")
 
     try:
         # Unload pipeline
@@ -147,7 +147,7 @@ def unload_all(progress=gr.Progress()):
         cleanup_tensors()
 
         progress(1.0, desc="Unload complete")
-        return "All models completely unloaded from VRAM. The app will reload models when needed."
+        return "Models unloaded from VRAM. Models will be reloaded when needed."
     except Exception as e:
         progress(1.0, desc="Unload failed")
         return f"Error during unload process: {str(e)}"
@@ -281,8 +281,8 @@ def select_gallery_image(evt: gr.SelectData):
     if evt.index < len(gallery_images):
         selected_image, filename = list(gallery_images)[evt.index]
         selected_gallery_image = selected_image
-        return f"Selected image: {filename}", gr.update(visible=True)
-    return "Invalid selection", gr.update(visible=False)
+        return f"Selected image: {filename}"
+    return "Invalid selection"
 
 
 def send_selected_to_input():
@@ -492,7 +492,6 @@ def send_to_input(result_slider):
     return gr.update(), gr.update(), gr.update(), gr.update(), "No result to send to input"
 
     
-    
 def handle_image_upload(image):
     if image is None:
         return gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), "No image loaded. Please upload an image."
@@ -503,12 +502,19 @@ def handle_image_upload(image):
     
     
     
+
 title = """
-<div style="text-align: center; padding: 5px;">
-    <h1 style="margin-bottom: 5px;">Diffusers Image Inpaint/Remove</h1>
-    <p>Drop an image you would like to edit. Draw a mask with the Draw Tool and hit Generate to remove. Use prompting for inpainting to add.</p>
+<style>
+.title-container{text-align:center;margin:auto;padding:8px 12px;background:linear-gradient(to bottom,#162828,#101c1c);color:#fff;border-radius:8px;font-family:Arial,sans-serif;border:2px solid #0a1212;box-shadow:0 2px 4px rgba(0,0,0,0.1);position:relative}.title-container h1{font-size:2em;margin:0 0 5px;font-weight:300;color:#ff6b35}.title-container p{color:#b0c4c4;font-size:0.9em;margin:0 0 5px}.title-container a{color:#ff6b35;text-decoration:none;transition:color 0.3s ease}.title-container a:hover{color:#ff8c5a}.links-left,.links-right{position:absolute;bottom:5px;font-size:0.8em;color:#a0a0a0}.links-left{left:10px}.links-right{right:10px}.emoji-icon{vertical-align:middle;margin-right:3px;font-size:1em}
+</style>
+<div class="title-container">
+<h1>Diffusers Image Inpaint/Remove</h1>
+<p>Select an image - Draw a mask - Remove or replace.</p>
+<div class="links-left"><span class="emoji-icon">⚡</span>Powered by <a href="https://pinokio.computer/" target="_blank">Pinokio</a></div>
+<div class="links-right">Core code borrowed from and inspired by <a href="https://huggingface.co/OzzyGT" target="_blank">OzzyGT</a></div>
 </div>
 """
+
 
 with gr.Blocks() as demo:
     gr.HTML(title)
@@ -525,13 +531,15 @@ with gr.Blocks() as demo:
             elem_classes=["image-slider-custom"],
         )
         
-    with gr.Row(variant = "compact"):
-        run_button = gr.Button("Generate", variant="primary", scale=3)
-        num_images = gr.Slider(value=1, label="Number of Images", minimum=1,maximum=10, step=1, scale=2)
+    with gr.Row():
+        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (for adding details via inpaint)", scale=3)
+        num_images = gr.Slider(value=1, label="Number of Images", minimum=1,maximum=10, step=1, scale=1)
+        auto_save = gr.Checkbox(True, label="Auto-save", scale=1)
         paste_back = gr.Checkbox(True, label="Paste back original background", scale=1)
-        auto_save = gr.Checkbox(True, label="Autosave all results", scale=1)
+        run_button = gr.Button("Generate", variant="primary", size="sm", scale=2)
         # unload_vram_btn = gr.Button("Unload VRAM", variant="primary", size = "sm")
-        unload_all_btn = gr.Button("Unload all Models", variant="stop", size = "sm")
+        result_to_input = gr.Button("Use as Input Image", size="sm", scale=1)
+        unload_all_btn = gr.Button("Unload models", variant="stop", size="sm", scale=1)
         
     with gr.Row():
         model_selection = gr.Dropdown(
@@ -540,8 +548,9 @@ with gr.Blocks() as demo:
             label="Model",
             scale=2
         )
-        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (for adding details via inpaint)", scale=2, visible=True)
-
+        guidance_scale = gr.Slider(value=1.5, label="Guidance Scale", minimum=1.5, maximum=8, step=0.5, scale=1)
+        steps = gr.Slider(value=8, label="Steps", minimum=1, maximum=16, step=1, visible=True, scale=1)
+        console_info = gr.HTML(label="Console")
         resize_slider = gr.Dropdown(
             choices=[],
             value=None,
@@ -550,14 +559,9 @@ with gr.Blocks() as demo:
             interactive=False
         )
         resize_button = gr.Button("Apply Resize", scale=1, size="sm", interactive=False)
-        guidance_scale = gr.Slider(value=1.5, label="Guidance Scale", minimum=1.5, maximum=8, step=0.5, scale=1)
-        steps = gr.Slider(value=8, label="Steps", minimum=1, maximum=16, step=1, visible=True, scale=1)
+
+
         
-    with gr.Row(variant="compact"):   
-        open_folder_button = gr.Button("Open Outputs Folder", variant="secondary")
-        console_info = gr.HTML(label="Console")
-        result_to_input = gr.Button("Send Result to Input")
-    gr.Markdown("---")     
     with gr.Row():
         gallery = gr.Gallery(
             label=f"Image Gallery (most recent {MAX_GALLERY_IMAGES} images)",
@@ -566,15 +570,16 @@ with gr.Blocks() as demo:
             preview=False,
             object_fit="contain",
             columns=5,
-            #height=400,
             show_download_button=False
         )
         
-    with gr.Row():    
-        clear_gallery_btn = gr.Button("Clear Gallery", scale=1)
-        save_selected_btn = gr.Button("Save Selected", visible=True)
-        send_gallery_to_input_btn = gr.Button("Send Selected to Input", visible=True)
-        gallery_status = gr.Textbox(label="Gallery Status", interactive=False)
+    with gr.Row():
+        clear_gallery_btn = gr.Button("Clear Gallery", size="sm", variant="stop", scale=1)
+        open_folder_button = gr.Button("Open Outputs Folder", scale=2) 
+        gallery_status = gr.Textbox(label="Gallery Status", interactive=False, scale=2)
+        save_selected_btn = gr.Button("Save Selected", scale=2)
+        send_selected_to_input_btn = gr.Button("Send Selected to Input", scale=1)  
+   
    
    
     # event handlers        
@@ -594,7 +599,7 @@ with gr.Blocks() as demo:
 
     gallery.select(
         fn=select_gallery_image,
-        outputs=[gallery_status, save_selected_btn]
+        outputs=gallery_status
     )
     
     save_selected_btn.click(
@@ -613,7 +618,7 @@ with gr.Blocks() as demo:
         outputs=[input_image, result, resize_slider, resize_button, console_info],
     )
     
-    send_gallery_to_input_btn.click(
+    send_selected_to_input_btn.click(
         fn=send_selected_to_input,
         outputs=[input_image, resize_slider, resize_button, console_info, gallery_status]
     )

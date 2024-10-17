@@ -160,14 +160,6 @@ def fill_image(image, width, height, overlap_percentage, resize_percentage, num_
     cleanup_tensors()
     
     
-# def can_expand(source_width, source_height, target_width, target_height, alignment):
-    # """Checks if the image can be expanded based on the alignment."""
-    # if alignment in ("Left", "Right") and source_width >= target_width:
-        # return False
-    # if alignment in ("Top", "Bottom") and source_height >= target_height:
-        # return False
-    # return True
-
 def prepare_image_and_mask(image, width, height, overlap_percentage, resize_percentage, alignment, overlap_left, overlap_right, overlap_top, overlap_bottom):
     target_size = (width, height)
 
@@ -178,11 +170,6 @@ def prepare_image_and_mask(image, width, height, overlap_percentage, resize_perc
     
     # Resize the source image to fit within target size
     source = image.resize((new_width, new_height), Image.LANCZOS)
-
-    # # Apply resize using percentage
-    # resize_factor = resize_percentage / 100
-    # new_width = int(source.width * resize_factor)
-    # new_height = int(source.height * resize_factor)
 
     # Calculate new dimensions based on percentage
     resize_factor = resize_percentage / 100
@@ -278,11 +265,6 @@ def update_preview_mask(image, width, height, overlap_percentage, resize_percent
         return gr.update(visible=False), f"Error updating preview: {str(e)}"
 
 
-# def clear_result():
-    # """Clears the result ImageSlider."""
-    # return gr.update(value=None)
-
-
 def preload_presets(target_ratio, ui_width, ui_height, resize_percentage):
     if target_ratio == "Portrait":
         changed_width, changed_height = 832, 1216
@@ -315,32 +297,6 @@ def select_the_right_preset(user_width, user_height):
         return "Square"
     else:
         return "Custom"
-
-
-# def update_history(new_image, auto_save_checked):
-    # global gallery_images
-    # if new_image is not None:
-        # # Extract the image from the tuple if necessary
-        # if isinstance(new_image, tuple):
-            # new_image = new_image[1] if len(new_image) > 1 else new_image[0]
-        
-        # # Convert to PIL Image if it's a numpy array
-        # if isinstance(new_image, np.ndarray):
-            # new_image = Image.fromarray(new_image.astype('uint8'))
-        # elif isinstance(new_image, str):
-            # new_image = Image.open(new_image)
-        
-        # filename = f"outp_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.png"
-        # gallery_images.appendleft((new_image, filename))
-        
-        # if auto_save_checked:
-            # save_output(new_image, True, filename)
-        
-        # # Ensure gallery_images doesn't exceed MAX_GALLERY_IMAGES
-        # while len(gallery_images) > MAX_GALLERY_IMAGES:
-            # gallery_images.pop()
-    
-    # return gr.update(value=list(gallery_images))
 
 
 def save_output(latest_result, auto_save, filename):
@@ -501,11 +457,6 @@ Original image size: {width}x{height}
 Select a Preset or click Custom and set your own.
 To help visualize settings - check out Preview Mask in Masking Options below.
 """
-    
-    # Update width and height sliders
-    # width_update = gr.update(maximum=width, value=width)
-    # height_update = gr.update(maximum=height, value=height)
-    
     # Reset preview image and update placeholder
     preview_update = gr.update(value=None, placeholder="Click Update Preview Mask")
     
@@ -513,8 +464,6 @@ To help visualize settings - check out Preview Mask in Masking Options below.
         info_text, 
         gr.update(interactive=True), 
         gr.update(visible=False), 
-        # width_update, 
-        # height_update, 
         preview_update
     )
  
@@ -538,7 +487,7 @@ title = """
 <h1>Diffusers Image Outpaint</h1>
 <p>Extend your images using AI</p>
 <div class="links-left"><span class="emoji-icon">⚡</span>Powered by <a href="https://pinokio.computer/" target="_blank">Pinokio</a></div>
-<div class="links-right">Code and inspiration borrowed from <a href="https://huggingface.co/OzzyGT" target="_blank">OzzyGT</a> | <a href="https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint" target="_blank">fffiloni</a></div>
+<div class="links-right">Code and inspiration borrowed from <a href="https://huggingface.co/OzzyGT" target="_blank">OzzyGT</a> & <a href="https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint" target="_blank">fffiloni</a></div>
 </div>
 """
 
@@ -559,12 +508,6 @@ with gr.Blocks() as demo:
             with gr.Row():
                 use_as_input_btn = gr.Button("Use as Input Image", size="sm")
                 clear_input_button = gr.Button("Clear", size="sm")
-                
-    
-        # with gr.Row():
-            # with gr.Column():
-                # use_as_input_button = gr.Button("Use as Input Image", size="sm")
-                # clear_input_button = gr.Button("Clear", size="sm")
                 # unload_all_btn = gr.Button("Unload all Models", variant="stop", size = "sm")
 
 
@@ -658,10 +601,6 @@ with gr.Blocks() as demo:
         send_selected_to_input_btn = gr.Button("Send Selected to Input", scale=1)
 
 
-    # def toggle_preview_visibility(choice):
-        # return gr.update(visible=(choice == "On"))
-        
-        
     # event handlers  
 
     run_button.click(

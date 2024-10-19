@@ -1,5 +1,5 @@
-# Diffusers Image Fill   
-a Pinokio install script:   [pinokio.computer](https://pinokio.computer/)
+# Diffusers Image Fill 
+a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" align="right"></a>
 <table>
   <tr>
     <td width="25%" style="vertical-align: top; padding-right: 20px;">
@@ -41,8 +41,9 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/)
 </table>
 
 * If you already have Diffusers Image Fill installed in Pinokio, you can simply copy the loose files from this repo and drop them into your current `.\api\diffusers-image-fill.git` folder. Copying over the existing files. No install required. 
-* Yes, a model loader would be cool. I tested and didn't really notice an improvement from the half dozen popular models i tried. Also, it's geared for diffusers multi file format and uses a custom SDXLpipeline that doesn't seem to work nicely with `from_single_file`. I also wasn't able to optimize any more than adding in garbage collection and cuda cache. Moving the vae to CPU was less impactful than i'd hoped, so it is what it is!  Something new and better will come next month i'm sure ;)
-* Imo, this is a fantastic app for prepping images for a Flux upscale. It's also great at generative fill compared to other alternatives. I was close to adding an upscaler using the Promax ControlNet, but I can't afford to spend anymore time on it!  Too many new things coming out to play with!
+* Yes, a model loader would be cool. I tested and didn't really notice an improvement from the half dozen popular models i tried. Also, it's geared for diffusers multi file format and uses a custom SDXLpipeline that doesn't seem to work nicely with `from_single_file`. I also wasn't able to optimize any more than adding in garbage collection and cuda cache. Moving the vae to CPU was less impactful than i'd hoped!
+* Imo, this is a fantastic app for prepping images for a Flux upscale. It's also great at generative fill compared to other alternatives. I was close to adding an upscaler using the Promax ControlNet, but I can't afford to spend anymore time on it! 
+* oh, and it's mostly written by ClaudeAI ;) long as you know what you want, you can eventually do it. just have to watch for it's love for creating new functions other functions.. and next minute you have half a dozen functions related to resizing an input image haha! it's effective but messy. i could spend ages refactoring, but it works well enough :)
 * Enjoy!
 
 <sub>

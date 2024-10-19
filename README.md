@@ -16,9 +16,9 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/)
   </p>
   
   <ul style="list-style-type: none; padding-left: 0; margin-top: 20px;">
-    <li style="margin-bottom: 10px;">📸 remove or inpaint: <a href="https://huggingface.co/spaces/OzzyGT/diffusers-image-fill">https://huggingface.co/spaces/OzzyGT/diffusers-image-fill</a></li>
-    <li style="margin-bottom: 10px;">🖌️ outpaint: <a href="https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint">https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint</a></li>
-    <li style="margin-bottom: 10px;">🤖 zoom: <a href="https://huggingface.co/spaces/multimodalart/outpaint-video-zoom">https://huggingface.co/spaces/multimodalart/outpaint-video-zoom</a></li>
+    <li style="margin-bottom: 10px;">📸 remove or inpaint: <a href="https://huggingface.co/spaces/OzzyGT/diffusers-image-fill">/spaces/OzzyGT/diffusers-image-fill</a></li>
+    <li style="margin-bottom: 10px;">🖌️ outpaint: <a href="https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint">/spaces/fffiloni/diffusers-image-outpaint</a></li>
+    <li style="margin-bottom: 10px;">🤖 zoom: <a href="https://huggingface.co/spaces/multimodalart/outpaint-video-zoom">/spaces/multimodalart/outpaint-video-zoom</a></li>
   </ul>
 </td>
   </tr>

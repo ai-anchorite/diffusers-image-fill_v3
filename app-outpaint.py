@@ -19,9 +19,6 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageDraw
 
-# import warnings
-# warnings.filterwarnings("ignore", message="A mixture of fp16 and non-fp16 filenames will be loaded.")
-
 DEVICE = devicetorch.get(torch)
 
 MAX_GALLERY_IMAGES = 20
@@ -637,14 +634,14 @@ with gr.Blocks() as demo:
     )
     
     width_slider.change(
-        fn=select_the_right_preset,
+        #fn=select_the_right_preset,
         inputs=[width_slider, height_slider],
         outputs=target_ratio,
         queue=False
     )
 
     height_slider.change(
-        fn=select_the_right_preset,
+        #fn=select_the_right_preset,
         inputs=[width_slider, height_slider],
         outputs=target_ratio,
         queue=False

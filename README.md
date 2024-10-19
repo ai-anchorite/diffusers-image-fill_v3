@@ -63,7 +63,12 @@ If you already have Diffusers Image Fill installed in Pinokio:
      
  2. These files will overwrite existing ones. No additional installation required. 
 
-* i was planning on combining them into one UI, but gave me a headache.. and video models are dropping left and right!
+- **App Switching:** Click `Refresh` on the Pinokio top bar when switching between companion apps to update the Gradio webUI.
+- **Cache Management:** Use the provided `Delete Gradio Image Cache` button periodically to manage temporary images in the Gradio cache.
+
+- **Project Status:** This is an enhanced proof-of-concept that does what it says on the tin, with room for future improvements. Read the linked guide by <a href="https://huggingface.co/blog/OzzyGT/diffusers-image-fill">OzzyGT</a> for an idea about what's going on under the hood. I prefer dash and interior!
+
+i was planning on combining them into one UI, but gave me a headache.. and video models are dropping left and right!
 * Yes, a model loader would be cool. I tested and didn't really notice an improvement from the half dozen popular models i tried. Also, it's geared for diffusers multi file format and uses a custom SDXLpipeline that doesn't seem to work nicely with `from_single_file`. I also wasn't able to optimize any more than adding in garbage collection and cuda cache. Moving the vae to CPU was less impactful than i'd hoped!
 * Adding FastSAM for inpaint masking would be cool as well. and flux.. 
 * Imo, this is a fantastic app for prepping images for a Flux upscale. It's also great at generative fill compared to other alternatives. I was close to adding an upscaler using the Promax ControlNet, but I can't afford to spend anymore time on it! 

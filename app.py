@@ -5,6 +5,7 @@ import os
 import webbrowser
 import math
 import gc
+import numpy as np
 
 from diffusers import AutoencoderKL, TCDScheduler
 from diffusers.models.model_loading_utils import load_state_dict
@@ -36,6 +37,7 @@ global_original_image = None
 latest_result = None
 gallery_images = deque(maxlen=MAX_GALLERY_IMAGES)
 selected_gallery_image = None
+selected_image_index = None
 
 
 def init(progress=gr.Progress()):
@@ -63,7 +65,7 @@ def init(progress=gr.Progress()):
         model, _, _, _, _ = ControlNetModel_Union._load_pretrained_model(
             controlnet_model, state_dict, model_file, "xinsir/controlnet-union-sdxl-1.0"
         )
-        model.to(device=DEVICE, dtype=torch.float16)
+        model.to(DEVICE, dtype=torch.float16)
 
         progress(0.6, desc="Loading VAE")
         vae = AutoencoderKL.from_pretrained(
@@ -77,11 +79,12 @@ def init(progress=gr.Progress()):
             vae=vae,
             controlnet=model,
             variant="fp16",
+            use_safetensors=True,
         ).to(DEVICE)
 
         progress(0.9, desc="Setting up scheduler")
         pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
-
+        #enable_model_cpu_offload()
         progress(1.0, desc="Model loading complete")
         return "Model loaded successfully."
     else:
@@ -155,6 +158,10 @@ def unload_all(progress=gr.Progress()):
    
 def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images):
     global latest_result, gallery_images, global_image
+    
+    if image is None:
+        return (None, None), gr.update(), "Error: No input image provided. Please upload an image first."
+        
     init()
     source = global_image 
     mask = image["layers"][0]
@@ -182,7 +189,7 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
     for n in range(num_images):
         intermediate_images = []
         
-        f"Starting generation of image {n+1} of {num_images}..."
+        yield (source, cnet_image), gr.update(), f"Starting generation of image {n+1} of {num_images}..."
         
         for image in pipe(
             prompt_embeds=prompt_embeds,
@@ -193,7 +200,7 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
             num_inference_steps=steps,
             image=cnet_image,
         ):
-            yield (image, cnet_image), gr.update(value=None, interactive=False), f"Generating image {n+1} of {num_images}..."
+            yield (image, cnet_image), gr.update(), f"Generating image {n+1} of {num_images}..."
             intermediate_images.append(image)
 
         final_image = intermediate_images[-1]
@@ -203,63 +210,37 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
             result_image.paste(final_image, (0, 0), binary_mask)
         else:
             result_image = final_image.convert("RGBA")
-        
+            
         all_results.append(result_image)
+        gallery_update = update_gallery(result_image, auto_save)
         
-        save_path, filename = save_output(result_image, auto_save)
-        gallery_images.append((result_image, filename))
-        
-      
-        gallery_update = [(img, fname) for img, fname in gallery_images]
-        yield (source, result_image), gallery_update, f"Completed image {n+1} of {num_images}"
-        
+        yield (source, result_image), gallery_update,  f"Completed image {n+1} of {num_images}"
 
-    latest_result = all_results[-1]
-    yield (source, latest_result), gallery_update, "All images generated successfully!"
-    cleanup_tensors()
+    if all_results:
+        latest_result = all_results[-1]
+        print(f"Debug: latest_result type: {type(latest_result)}, size: {latest_result.size if hasattr(latest_result, 'size') else 'N/A'}")
+    else:
+        latest_result = None
+        print("Debug: No results generated")
 
-
-def save_output(latest_result, auto_save): 
-    try:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        current_time = datetime.now().strftime("%Y%m%d%H%M%S")
-        new_filename = f"inp_{current_time}.png"
-        full_path = os.path.join(OUTPUT_DIR, new_filename)
-        
-        if auto_save:
-            latest_result.save(full_path)
-            print(f"Image auto-saved as: {full_path}")
-            return full_path, new_filename
-        else:
-            print(f"Auto-save disabled, assigned filename: {new_filename}")
-            return None, new_filename
-    except Exception as e:
-        print(f"Error handling image path/save: {e}")
-        return None, None
-
-
-def save_selected_image():
-    global selected_gallery_image
-    if selected_gallery_image is None:
-        return "Please select an image first"
-        
-    for image, filename in gallery_images:
-        if image == selected_gallery_image:
-            try:
-                os.makedirs(OUTPUT_DIR, exist_ok=True)
-                full_path = os.path.join(OUTPUT_DIR, filename)
-                image.save(full_path)
-                return f"Image saved as: {filename}"
-            except Exception as e:
-                return f"Error saving image: {str(e)}"
-    return "Selected image no longer in gallery"
-
+    if latest_result is not None:
+        yield (source, latest_result), gallery_update, "All images generated successfully!"
+    else:
+        yield (source, source), gallery_update, "No images were generated successfully."
+    
+    cleanup_tensors() 
+    
+    
 
 def clear_gallery():
     global gallery_images, selected_gallery_image
     gallery_images.clear()
     selected_gallery_image = None
-    return gr.update(value=None), gr.update(visible=False), gr.update(value=None)
+    return gr.update(value=None), gr.update(value=None), "Selected image no longer in gallery"
+    
+    
+def clear_input_and_result():
+    return gr.update(value=None), gr.update(value=None), "Input and result cleared."  
   
   
 def open_outputs_folder():
@@ -270,43 +251,6 @@ def open_outputs_folder():
         return "Opened outputs folder (folder can be shy and hide behind active windows)."
     except Exception as e:
         return f"Error opening outputs folder: {str(e)}"
-    
-    
-def clear_result():
-    return gr.update(value=None)
-
-
-def select_gallery_image(evt: gr.SelectData):
-    global selected_gallery_image
-    if evt.index < len(gallery_images):
-        selected_image, filename = list(gallery_images)[evt.index]
-        selected_gallery_image = selected_image
-        return f"Selected image: {filename}"
-    return "Invalid selection"
-
-
-def send_selected_to_input():
-    global selected_gallery_image, global_image, global_original_image
-    try:
-        if selected_gallery_image is not None:
-            global_image = selected_gallery_image.copy()
-            global_original_image = selected_gallery_image.copy()
-            
-            # Update resize controls for the new image
-            resize_slider_update, resize_button_update, console_info_update = update_resize_controls({"background": global_image})
-            
-            return (
-                gr.update(value=global_image),  # Update input image
-                resize_slider_update,  # Update resize slider options and value
-                resize_button_update,  # Update resize button state
-                console_info_update,  # Update console info
-                "Selected image successfully sent to input"  # Status message
-            )
-        else:
-            return gr.update(), gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), gr.update(), "No image selected. Please select an image from the gallery first."
-    except Exception as e:
-        print(f"Error sending image to input: {str(e)}")
-        return gr.update(), gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), gr.update(), f"Error sending image to input: {str(e)}"
 
     
 def set_img(image, size_slider):
@@ -499,10 +443,110 @@ def handle_image_upload(image):
     # Process the image
     resize_slider, resize_button, info = update_resize_controls(image)
     return resize_slider, resize_button, info
-    
-    
-    
 
+
+def update_gallery(result_image, auto_save):
+    global gallery_images
+    
+    filename = f"inp_{datetime.now().strftime('%Y%m%d%H%M%S%f')}.png"
+    gallery_images.appendleft((result_image, filename))
+    
+    if auto_save:
+        save_output(result_image, True, filename)
+    
+    while len(gallery_images) > MAX_GALLERY_IMAGES:
+        gallery_images.pop()
+    
+    print(f"Debug: Gallery updated. First item type: {type(gallery_images[0][0])}")
+    
+    return gr.update(value=list(gallery_images))
+    
+    
+def update_selected_image(evt: gr.SelectData):
+    global selected_gallery_image, selected_image_index
+    if evt.index < len(gallery_images):
+        selected_image, filename = gallery_images[evt.index]
+        selected_gallery_image = selected_image
+        selected_image_index = evt.index
+        return f"Selected image: {filename}"
+    return "Invalid selection"
+
+
+def save_selected_image(gallery_state):
+    global selected_image_index
+    if selected_image_index is None or gallery_state is None:
+        return "Please select an image first"
+    
+    try:
+        selected_image, filename = gallery_state[selected_image_index]
+        print(f"Debug: save_selected_image - selected_image type: {type(selected_image)}, filename: {filename}")
+        
+        full_path = os.path.join(OUTPUT_DIR, filename)
+        
+        if os.path.exists(full_path):
+            return f"Image already saved as: {filename}"
+        
+        if isinstance(selected_image, np.ndarray):
+            Image.fromarray(selected_image).save(full_path)
+        elif isinstance(selected_image, Image.Image):
+            selected_image.save(full_path)
+        elif isinstance(selected_image, str):
+            # If it's a string, it might be a path to an already saved image
+            if os.path.exists(selected_image):
+                import shutil
+                shutil.copy(selected_image, full_path)
+            else:
+                return f"Error: Invalid image data (string) for {filename}"
+        else:
+            return f"Error: Invalid image data for {filename}. Type: {type(selected_image)}"
+        
+        return f"Image saved as: {filename}"
+    except Exception as e:
+        print(f"Error details: {str(e)}")
+        return f"Error saving image: {str(e)}"
+        
+
+def send_selected_to_input():
+    global selected_gallery_image, global_image, global_original_image
+    try:
+        if selected_gallery_image is not None:
+            global_image = selected_gallery_image.copy()
+            global_original_image = selected_gallery_image.copy()
+            
+            # Update resize controls for the new image
+            resize_slider_update, resize_button_update, console_info_update = update_resize_controls({"background": global_image})
+            
+            return (
+                gr.update(value=global_image),  # Update input image
+                resize_slider_update,  # Update resize slider options and value
+                resize_button_update,  # Update resize button state
+                console_info_update,  # Update console info
+                "Selected image successfully sent to input"  # Status message
+            )
+        else:
+            return gr.update(), gr.update(value=None, choices=[]), gr.update(), gr.update(), "No image selected. Please select an image from the gallery first."
+    except Exception as e:
+        print(f"Error sending image to input: {str(e)}")
+        return gr.update(), gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), gr.update(), f"Error sending image to input: {str(e)}"
+        
+        
+def save_output(latest_result, auto_save, filename):
+    try:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        full_path = os.path.join(OUTPUT_DIR, filename)
+        
+        if auto_save:
+            latest_result.save(full_path)
+            print(f"Image auto-saved as: {full_path}")
+            return full_path, filename
+        else:
+            print(f"Auto-save disabled, assigned filename: {filename}")
+            return None, filename
+    except Exception as e:
+        print(f"Error handling image path/save: {e}")
+        return None, None
+ 
+ 
 title = """
 <style>
 .title-container{text-align:center;margin:auto;padding:8px 12px;background:linear-gradient(to bottom,#162828,#101c1c);color:#fff;border-radius:8px;font-family:Arial,sans-serif;border:2px solid #0a1212;box-shadow:0 2px 4px rgba(0,0,0,0.1);position:relative}.title-container h1{font-size:2em;margin:0 0 5px;font-weight:300;color:#ff6b35}.title-container p{color:#b0c4c4;font-size:0.9em;margin:0 0 5px}.title-container a{color:#ff6b35;text-decoration:none;transition:color 0.3s ease}.title-container a:hover{color:#ff8c5a}.links-left,.links-right{position:absolute;bottom:5px;font-size:0.8em;color:#a0a0a0}.links-left{left:10px}.links-right{right:10px}.emoji-icon{vertical-align:middle;margin-right:3px;font-size:1em}
@@ -539,6 +583,7 @@ with gr.Blocks() as demo:
         run_button = gr.Button("Generate", variant="primary", size="sm", scale=2)
         # unload_vram_btn = gr.Button("Unload VRAM", variant="primary", size = "sm")
         result_to_input = gr.Button("Use as Input Image", size="sm", scale=1)
+        clear_input_button = gr.Button("Clear", size="sm")
         unload_all_btn = gr.Button("Unload models", variant="stop", size="sm", scale=1)
         
     with gr.Row():
@@ -567,22 +612,25 @@ with gr.Blocks() as demo:
             label=f"Image Gallery (most recent {MAX_GALLERY_IMAGES} images)",
             show_label=True,
             elem_id="gallery",
-            preview=False,
-            object_fit="contain",
             columns=5,
-            show_download_button=False
+            height="auto",
+            object_fit="contain",
+            allow_preview=True,
+            preview=False,
+            show_download_button=False,
         )
         
     with gr.Row():
         clear_gallery_btn = gr.Button("Clear Gallery", size="sm", variant="stop", scale=1)
         open_folder_button = gr.Button("Open Outputs Folder", scale=2) 
-        gallery_status = gr.Textbox(label="Gallery Status", interactive=False, scale=2)
+        gallery_status = gr.Textbox(interactive=False, scale=2)
         save_selected_btn = gr.Button("Save Selected", scale=2)
         send_selected_to_input_btn = gr.Button("Send Selected to Input", scale=1)  
    
    
    
     # event handlers        
+
     run_button.click(
         fn=lambda: "Preparing Image Generation...", 
         inputs=None,
@@ -597,30 +645,20 @@ with gr.Blocks() as demo:
         outputs=[result, gallery, console_info]
     )
 
-    gallery.select(
-        fn=select_gallery_image,
-        outputs=gallery_status
-    )
-    
-    save_selected_btn.click(
-        fn=save_selected_image,
-        outputs=gallery_status
-    )
-    
     clear_gallery_btn.click(
         fn=clear_gallery,
-        outputs=[gallery, save_selected_btn, gallery_status]
+        outputs=[gallery, gallery_status]
+    )
+    
+    clear_input_button.click(
+        fn=clear_input_and_result,
+        outputs=[input_image, result, console_info]
     )
     
     result_to_input.click(
         fn=send_to_input,
         inputs=[result], 
         outputs=[input_image, result, resize_slider, resize_button, console_info],
-    )
-    
-    send_selected_to_input_btn.click(
-        fn=send_selected_to_input,
-        outputs=[input_image, resize_slider, resize_button, console_info, gallery_status]
     )
     
     open_folder_button.click(
@@ -651,5 +689,27 @@ with gr.Blocks() as demo:
         fn=unload_all,
         outputs=[console_info]
     )
-     
+    
+    gallery.select(
+        fn=update_selected_image,
+        outputs=gallery_status
+    )
+
+    save_selected_btn.click(
+        fn=save_selected_image,
+        inputs=gallery,
+        outputs=gallery_status
+    )
+
+    send_selected_to_input_btn.click(
+        fn=send_selected_to_input,
+        inputs=None,
+        outputs=[
+            input_image,
+            resize_slider,
+            resize_button,
+            console_info,
+            gallery_status
+        ]
+    )
 demo.launch(share=False)

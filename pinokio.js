@@ -79,7 +79,7 @@ module.exports = {
           }
         }, {
           icon: "fa-solid fa-power-off",
-          text: "Start Outpaint Zooooom",
+          text: "Start Outpaint Video Zoom",
           href: "start.js",
           params: {
             type: "zoom"

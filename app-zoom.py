@@ -17,6 +17,9 @@ import os
 
 DEVICE = devicetorch.get(torch)
 
+OUTPUT_DIR = "outputs" 
+
+
 # Load models and configurations
 config_file = hf_hub_download(
     "xinsir/controlnet-union-sdxl-1.0",
@@ -308,8 +311,10 @@ css = """
 }
 """
 
-title = """<h1 align="center">Outpaint Video Zoom-In</h1>"""
-
+title = """
+<h1 align="center">Outpaint Video Zoom-In</h1>
+<p>Ported from: <a href="https://huggingface.co/spaces/multimodalart/outpaint-video-zoom" target="_blank">outpaint-video-zoom</a> <p>
+"""
 with gr.Blocks(css=css) as demo:
     with gr.Column():
         gr.HTML(title)
@@ -341,7 +346,7 @@ with gr.Blocks(css=css) as demo:
                         visible=False
                     )
 
-                with gr.Accordion(label="Advanced settings", open=False, visible=False) as settings_panel:
+                with gr.Accordion(label="Advanced settings", open=False, visible=True) as settings_panel:
                     with gr.Column():
                         with gr.Row():
                             width_slider = gr.Slider(

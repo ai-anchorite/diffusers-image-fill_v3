@@ -17,9 +17,6 @@ import os
 
 DEVICE = devicetorch.get(torch)
 
-OUTPUT_DIR = "outputs" 
-
-
 # Load models and configurations
 config_file = hf_hub_download(
     "xinsir/controlnet-union-sdxl-1.0",

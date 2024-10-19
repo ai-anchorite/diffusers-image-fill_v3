@@ -77,5 +77,6 @@ i was planning on combining them into one UI, but gave me a headache.. and video
 * Enjoy!
 
 <sub>
-This project is licensed under the Apache License 2.0. It builds upon Hugging Face Spaces by OzzyGT, fffiloni, and multimodalart, also under Apache 2.0.
+<p>This project is licensed under the Apache License 2.0. It builds upon Hugging Face Spaces by OzzyGT, fffiloni, and multimodalart, also under Apache 2.0.</p>
+Yes, this means you should tinker. Pinokio was built for tinkering.
 </sub>

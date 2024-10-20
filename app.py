@@ -2,7 +2,7 @@ import gradio as gr
 import torch
 import devicetorch
 import os
-import webbrowser
+import webbrowser #for opening the outputs folder. seemed the best way for cross-platform compatibility.
 # import math
 import gc
 import numpy as np

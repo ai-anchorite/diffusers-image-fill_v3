@@ -43,6 +43,9 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a hre
 
 ## 🖥️ System Requirements & Important Notes
 
+i'll add a switch for `24GB VRAM mode` with all the memory saving optimizations disabled.. it's a bit much atm. Probably tomorrow. 
+
+
 ### Hardware & Storage:
 - 32GB RAM for comfortable operation. I wouldn't try with 16GB system RAM.
 - 16GB+ VRAM recommended (12GB will work, but performance may vary). 

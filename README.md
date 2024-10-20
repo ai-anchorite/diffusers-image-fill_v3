@@ -63,7 +63,6 @@ If you already have Diffusers Image Fill installed in Pinokio:
    - `app.zoom.py`
      
  2. These files will overwrite existing ones. No additional installation required.
- 3. Or, install this fresh (it's 5GB of files), and then copy over the whole `hub` folder from your pre-existing `\api\diffusers-image-fill.git\cache\HF_HOME`. which is the other 15GB. 
 
 - **App Switching:** Click `Refresh` on the Pinokio top bar when switching between companion apps to update the Gradio webUI.
 - **Cache Management:** Use the provided `Delete Gradio Image Cache` button periodically to manage temporary images in the Gradio cache.

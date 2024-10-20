@@ -1,8 +1,8 @@
 const path = require('path')
 module.exports = {
   version: "2.0",
-  title: "diffusers-image-fill",
-  description: "Inpaint or Remove objects from an image - https://huggingface.co/spaces/OzzyGT/diffusers-image-fill - or Outpaint - https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint - or Outpaint Video Zoom - https://huggingface.co/spaces/multimodalart/outpaint-video-zoom",
+  title: "diffusers-image-fill3",
+description: "Inpaint or Remove | Outpaint to the horizon | Video Zoom in.  https://huggingface.co/spaces/OzzyGT/diffusers-image-fill https://huggingface.co/spaces/fffiloni/diffusers-image-outpaint https://huggingface.co/spaces/multimodalart/outpaint-video-zoom",
   icon: "icon.gif",
   menu: async (kernel, info) => {
     let installed = info.exists(__dirname, "cache")

@@ -3,14 +3,16 @@ import torch
 import devicetorch
 import os
 import webbrowser
-import math
+# import math
 import gc
 import numpy as np
+import psutil
 
 from diffusers import AutoencoderKL, TCDScheduler
 from diffusers.models.model_loading_utils import load_state_dict
 from controlnet_union import ControlNetModel_Union
 from pipeline_fill_sd_xl import StableDiffusionXLFillPipeline
+from diffusers.utils import is_xformers_available
 
 from huggingface_hub import hf_hub_download
 from gradio_imageslider import ImageSlider
@@ -22,16 +24,98 @@ from PIL import Image
 DEVICE = devicetorch.get(torch)
 
 MODELS = {
-    "RealVisXL V5.0 Lightning": "SG161222/RealVisXL_V5.0_Lightning",
+        "RealVisXL V5 Lightning": {
+        "path": "SG161222/RealVisXL_V5.0_Lightning",
+        "default_steps": 6,
+        "max_steps": 16,
+        "default_guidance": 1.5,
+        "max_guidance": 8.0,
+        "description": "For high-quality realistic image generation.",
+        "web_link": "https://civitai.com/models/139562/realvisxl-v50",
+        "supports_fp16": False
+    },
+        "RealismEngineSDXL v30": {
+        "path": "misri/realismEngineSDXL_v30VAE",
+        "default_steps": 25,
+        "max_steps": 50,
+        "default_guidance": 4,
+        "max_guidance": 10,
+        "description": "Realism model.",
+        "web_link": "https://civitai.com/models/152525/realism-engine-sdxl",
+        "supports_fp16": False
+    },
+        "Cyberrealistic v31": {
+        "path": "John6666/cyberrealistic-xl-v31-sdxl",
+        "default_steps": 25,
+        "max_steps": 50,
+        "default_guidance": 5,
+        "max_guidance": 10,
+        "description": "Good versatile realistism model.",
+        "web_link": "https://civitai.com/models/312530/cyberrealistic-xl",
+        "supports_fp16": False
+    },
+        "Leosams HelloWorldXL 7.0": {
+        "path": "misri/leosamsHelloworldXL_helloworldXL70",
+        "default_steps": 30,
+        "max_steps": 50,
+        "default_guidance": 4,
+        "max_guidance": 10,
+        "description": "Acclaimed multi-purpose model.",
+        "web_link": "https://civitai.com/models/43977/leosams-helloworld-xl",
+        "supports_fp16": False
+    },
+        # "Pornograffiti V10": {
+        # "path": "John6666/pornograffiti-v10-sdxl",
+        # "default_steps": 20,
+        # "max_steps": 50,
+        # "default_guidance": 5,
+        # "max_guidance": 10,
+        # "description": "NSFW - For experimental purposess.",
+        # "web_link": "https://civitai.com/models/863290/pornograffiti?modelVersionId=965940#_",
+        # "supports_fp16": False
+    # },
+        "Lustify V1 Lightning": {
+        "path": "GraydientPlatformAPI/lustify-lightning",
+        "default_steps": 6,
+        "max_steps": 16,
+        "default_guidance": 1.5,
+        "max_guidance": 5,
+        "description": "NSFW - For experimental purposess.",
+        "web_link": "https://civitai.com/models/573152?modelVersionId=639425",
+        "supports_fp16": False
+    },
+        # "Lustify V4": {
+        # "path": "John6666/lustify-sdxl-nsfwsfw-v4-sdxl",
+        # "default_steps": 30,
+        # "max_steps": 50,
+        # "default_guidance": 4,
+        # "max_guidance": 10,
+        # "description": "NSFW - For experimental purposess.",
+        # "web_link": "https://civitai.com/models/573152/lustify-sdxl-nsfw-and-sfw-checkpoint?modelVersionId=926965",
+        # "supports_fp16": False
+    # },
+    # Add other models here, setting "supports_fp16" to False if they don't specifically list an fp16 variant
 }
 
 
+DEFAULT_MODEL = "RealVisXL V5.0 Lightning"  # You can change this to any model in your MODELS dictionary
+
+# Ensure the default model exists in the MODELS dictionary
+if DEFAULT_MODEL not in MODELS:
+    # If the default model is not in MODELS, use the first model in the dictionary
+    DEFAULT_MODEL = next(iter(MODELS))
+    
+    
 MAX_GALLERY_IMAGES = 20 
 MIN_IMAGE_SIZE = 512 
 OUTPUT_DIR = "outputs" 
 VAE_SCALE_FACTOR = 8
 
+global pipe
+global current_model
+
 pipe = None
+current_model = None
 global_image = None
 global_original_image = None 
 latest_result = None
@@ -40,13 +124,19 @@ selected_gallery_image = None
 selected_image_index = None
 
 
-def init(progress=gr.Progress()):
-    global pipe
+
+def init(model_selection, progress=gr.Progress()):
+    global pipe, current_model
+
+    if pipe is not None and current_model != model_selection:
+        progress(0.1, desc="Unloading previous model")
+        unload_message = unload_all(progress)
+        progress(0.2, desc=unload_message)
 
     if pipe is None:
-        progress(0.1, desc="Starting model initialization")
+        progress(0.3, desc="Starting model initialization")
         
-        progress(0.2, desc="Loading ControlNet configuration")
+        progress(0.4, desc="Loading ControlNet configuration")
         config_file = hf_hub_download(
             "xinsir/controlnet-union-sdxl-1.0",
             filename="config_promax.json",
@@ -54,115 +144,123 @@ def init(progress=gr.Progress()):
         config = ControlNetModel_Union.load_config(config_file)
         controlnet_model = ControlNetModel_Union.from_config(config)
         
-        progress(0.3, desc="Downloading ControlNet model")
+        progress(0.5, desc="Downloading ControlNet model")
         model_file = hf_hub_download(
             "xinsir/controlnet-union-sdxl-1.0",
             filename="diffusion_pytorch_model_promax.safetensors",
         )
         
-        progress(0.4, desc="Loading ControlNet model")
+        progress(0.6, desc="Loading ControlNet model")
         state_dict = load_state_dict(model_file)
         model, _, _, _, _ = ControlNetModel_Union._load_pretrained_model(
             controlnet_model, state_dict, model_file, "xinsir/controlnet-union-sdxl-1.0"
         )
-        model.to(DEVICE, dtype=torch.float16)
+        model.to(torch.float16)
 
-        progress(0.6, desc="Loading VAE")
+        progress(0.7, desc="Loading VAE")
         vae = AutoencoderKL.from_pretrained(
             "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
-        ).to(DEVICE)
+        )
 
-        progress(0.8, desc="Loading main pipeline")
+        progress(0.8, desc=f"Loading main pipeline: {model_selection}")
+        
         pipe = StableDiffusionXLFillPipeline.from_pretrained(
-            "SG161222/RealVisXL_V5.0_Lightning",
+            MODELS[model_selection]["path"],
             torch_dtype=torch.float16,
-            vae=vae,
             controlnet=model,
-            variant="fp16",
+            vae=vae,
             use_safetensors=True,
-        ).to(DEVICE)
+            # variant="fp16",
+        )
+        
+        # Enable memory efficient attention if xformers is available
+        if is_xformers_available():
+            pipe.enable_xformers_memory_efficient_attention()
+        
+        # Enable CPU offloading
+        pipe.enable_model_cpu_offload()
 
         progress(0.9, desc="Setting up scheduler")
         pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
-        #enable_model_cpu_offload()
+        
+        current_model = model_selection
         progress(1.0, desc="Model loading complete")
-        return "Model loaded successfully."
+        return f"Model {model_selection} loaded successfully with optimizations for lower VRAM usage."
     else:
-        # If the model is already loaded, return None instead of a message
-        return None
+        return f"Model {model_selection} is already loaded."
+        
 
 def cleanup_tensors():
+    # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
-    gc.collect()
     
-# def unload_vram(progress=gr.Progress()):
-    # global pipe, vae, controlnet_model
+    # Force garbage collection to run multiple times
+    for _ in range(3):
+        gc.collect()
     
-    # progress(0.1, desc="Starting VRAM unload process")
-
-    # if pipe is not None:
-        # progress(0.3, desc="Offloading UNet to CPU")
-        # pipe.unet.to('cpu')
-        
-        # progress(0.5, desc="Offloading VAE to CPU")
-        # pipe.vae.to('cpu')
-        
-        # progress(0.7, desc="Offloading ControlNet to CPU")
-        # pipe.controlnet.to('cpu')
-
-    # if torch.cuda.is_available():
-        # progress(0.8, desc="Clearing CUDA cache")
-        # torch.cuda.empty_cache()
-
-    # progress(0.9, desc="Forcing garbage collection")
-    # gc.collect()
-
-    # progress(1.0, desc="VRAM unload complete")
-    # return "Large model components offloaded from VRAM to system RAM. Ready for quick redeployment."
+    # Attempt to release memory back to the system
+    psutil.Process().memory_full_info()
     
+    # Clear any remaining interprocess communication (IPC) resources
+    if hasattr(torch.cuda, 'ipc_collect'):
+        torch.cuda.ipc_collect()
+
+    # Clear unused memory from the memory pool
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
 
 def unload_all(progress=gr.Progress()):
-    global pipe, vae, controlnet_model
+    global pipe, current_model
     
-    progress(0.1, desc="Starting VRAM unload process")
+    progress(0.1, desc="Starting unload process")
 
     try:
         # Unload pipeline
         if pipe is not None:
-            for component in ['unet', 'vae', 'controlnet', 'text_encoder', 'text_encoder_2']:
+            for component in ['unet', 'vae', 'controlnet', 'text_encoder', 'text_encoder_2', 'scheduler']:
                 if hasattr(pipe, component):
-                    delattr(pipe, component)
+                    setattr(pipe, component, None)
             del pipe
             pipe = None
 
-        # Unload standalone components
-        if 'vae' in globals() and vae is not None:
-            del vae
-            vae = None
+        # Reset current model
+        current_model = None
 
-        if 'controlnet_model' in globals() and controlnet_model is not None:
-            del controlnet_model
-            controlnet_model = None
+        # Clear CUDA cache
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
 
-        # Clear any remaining CUDA cache
-        cleanup_tensors()
+        # Force garbage collection
+        for _ in range(3):
+            gc.collect()
+
+        # Attempt to release memory back to the system
+        import psutil
+        psutil.Process().memory_full_info()
 
         progress(1.0, desc="Unload complete")
-        return "Models unloaded from VRAM. Models will be reloaded when needed."
+        return "Models unloaded and memory cleared. New models will be loaded when needed."
     except Exception as e:
         progress(1.0, desc="Unload failed")
         return f"Error during unload process: {str(e)}"
 
    
 def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images):
-    global latest_result, gallery_images, global_image
+    global latest_result, gallery_images, global_image, pipe
     
     if image is None:
         return (None, None), gr.update(), "Error: No input image provided. Please upload an image first."
         
-    init()
+    # Check if we need to change the model
+    if pipe is None or current_model != model_selection:
+        init_message = init(model_selection)
+        yield (None, None), gr.update(), f"{init_message} Preparing for image generation..."
+    
     source = global_image 
     mask = image["layers"][0]
 
@@ -215,13 +313,14 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
         gallery_update = update_gallery(result_image, auto_save)
         
         yield (source, result_image), gallery_update,  f"Completed image {n+1} of {num_images}"
-
+        
+        # Clear cache after each generation
+        cleanup_tensors()
+        
     if all_results:
         latest_result = all_results[-1]
-        print(f"Debug: latest_result type: {type(latest_result)}, size: {latest_result.size if hasattr(latest_result, 'size') else 'N/A'}")
     else:
         latest_result = None
-        print("Debug: No results generated")
 
     if latest_result is not None:
         yield (source, latest_result), gallery_update, "All images generated successfully!"
@@ -253,18 +352,18 @@ def open_outputs_folder():
         return f"Error opening outputs folder: {str(e)}"
 
     
-def set_img(image, size_slider):
-    global global_image
-    if image is None or image["background"] is None:
-        return gr.update(value="No image loaded"), gr.update()
+# def set_img(image, size_slider):
+    # global global_image
+    # if image is None or image["background"] is None:
+        # return gr.update(value="No image loaded"), gr.update()
     
-    global_image = image["background"]
-    min_percentage = calculate_min_resize_percentage(global_image)
+    # global_image = image["background"]
+    # min_percentage = calculate_min_resize_percentage(global_image)
     
-    return (
-        update_image_info(size_slider),
-        gr.update(minimum=min_percentage)
-    )
+    # return (
+        # update_image_info(size_slider),
+        # gr.update(minimum=min_percentage)
+    # )
     
 def resize_image(image, min_size=MIN_IMAGE_SIZE, scale_factor=VAE_SCALE_FACTOR):
     width, height = image.size
@@ -302,7 +401,7 @@ def preview_resize(percentage):
         return f"Cannot resize below minimum allowed size of {MIN_IMAGE_SIZE}x{MIN_IMAGE_SIZE}."
     
     mp = (new_w * new_h) / 1000000
-    estimated_vram = 10.0 + (mp * 4) + 1.0
+    estimated_vram = 8.0 + (mp * 4) + 1.0
     
     if percentage == 100:
         resize_info = '<p style="color: #4CAF50;">Image is at 100% of its original size. No resize needed.</p>'
@@ -384,7 +483,7 @@ def update_resize_controls(image):
     
     width, height = global_original_image.size
     mp = (width * height) / 1000000
-    estimated_vram = 10.0 + (mp * 4) + 1.0
+    estimated_vram = 8.0 + (mp * 4) + 1.0
     
     resize_options = calculate_resize_options(global_original_image)
     
@@ -393,10 +492,10 @@ def update_resize_controls(image):
         resize_options = [100] + resize_options
     
     info_text = f"""
-<p><span style="color: #FF8C00; font-weight: bold;">Current size:</span> {width}x{height}</p>
-<p><span style="color: #4CAF50;">Available resize options: {", ".join(f"{opt}%" for opt in resize_options)}</span></p>
-<p><span style="color: #9932CC;">Estimated VRAM usage: {estimated_vram:.1f}GB</span></p>
-<p><span style="color: #1E90FF;">Minimum allowed size: {MIN_IMAGE_SIZE} pixels for the smallest dimension</p>
+<p>Current size: <span style="color: #FF8C00; font-weight: bold;">{width}x{height}</span></p>
+<p>Available resize options: <span style="color: #4CAF50;">{", ".join(f"{opt}%" for opt in resize_options)}</span></p>
+<p>Estimated VRAM usage: <span style="color: #FF3333;">{estimated_vram:.1f}GB</span></p>
+<p>Minimum allowed size: <span style="color: #4CAF50;">{MIN_IMAGE_SIZE} pixels</span> for the smallest dimension</p>
 """
     
     return (
@@ -457,8 +556,6 @@ def update_gallery(result_image, auto_save):
     while len(gallery_images) > MAX_GALLERY_IMAGES:
         gallery_images.pop()
     
-    print(f"Debug: Gallery updated. First item type: {type(gallery_images[0][0])}")
-    
     return gr.update(value=list(gallery_images))
     
     
@@ -479,8 +576,6 @@ def save_selected_image(gallery_state):
     
     try:
         selected_image, filename = gallery_state[selected_image_index]
-        print(f"Debug: save_selected_image - selected_image type: {type(selected_image)}, filename: {filename}")
-        
         full_path = os.path.join(OUTPUT_DIR, filename)
         
         if os.path.exists(full_path):
@@ -491,7 +586,6 @@ def save_selected_image(gallery_state):
         elif isinstance(selected_image, Image.Image):
             selected_image.save(full_path)
         elif isinstance(selected_image, str):
-            # If it's a string, it might be a path to an already saved image
             if os.path.exists(selected_image):
                 import shutil
                 shutil.copy(selected_image, full_path)
@@ -547,6 +641,37 @@ def save_output(latest_result, auto_save, filename):
         return None, None
  
  
+def update_model_info(model_selection):
+    model_info = MODELS[model_selection]
+    sea_green = "#20B2AA"  # Light Sea Green color
+    
+    # Create the clickable link
+    web_link_html = f'<a href="{model_info["web_link"]}" target="_blank">View Model</a>' if model_info["web_link"] else "Not available"
+    
+    console_content = f"""
+    <p><strong style="color: {sea_green}; font-size: 1.1em;">Model:</strong> {model_selection}</p>
+    <p><strong style="color: {sea_green}; font-size: 1.1em;">Description:</strong> {model_info['description']}</p>
+    <p><strong style="color: {sea_green}; font-size: 1.1em;">Recommended Settings:</strong></p>
+    <ul style="margin-top: 5px;">
+        <li><strong>Steps:</strong> {model_info['default_steps']} (max: {model_info['max_steps']})</li>
+        <li><strong>Guidance Scale:</strong> {model_info['default_guidance']} (max: {model_info['max_guidance']})</li>
+    </ul>
+    <p><strong style="color: {sea_green}; font-size: 1.1em;">Web Link:</strong> {web_link_html}</p>
+    """
+    # Wrap in the scrollable div
+    console_html = f'<div class="scrollable-console">{console_content}</div>'
+    
+    return (
+        gr.update(value=model_info["default_steps"], maximum=model_info["max_steps"]),
+        gr.update(value=model_info["default_guidance"], maximum=model_info["max_guidance"]),
+        console_html
+    )
+    
+def handle_model_change(model_selection):
+    steps, guidance_scale, console_info = update_model_info(model_selection)
+    # console_info += "<p>Model settings updated. The new model will be loaded when you start generation.</p>"
+    return steps, guidance_scale, console_info
+    
 title = """
 <style>
 .title-container{text-align:center;margin:auto;padding:8px 12px;background:linear-gradient(to bottom,#162828,#101c1c);color:#fff;border-radius:8px;font-family:Arial,sans-serif;border:2px solid #0a1212;box-shadow:0 2px 4px rgba(0,0,0,0.1);position:relative}.title-container h1{font-size:2em;margin:0 0 5px;font-weight:300;color:#ff6b35}.title-container p{color:#b0c4c4;font-size:0.9em;margin:0 0 5px}.title-container a{color:#ff6b35;text-decoration:none;transition:color 0.3s ease}.title-container a:hover{color:#ff8c5a}.links-left,.links-right{position:absolute;bottom:5px;font-size:0.8em;color:#a0a0a0}.links-left{left:10px}.links-right{right:10px}.emoji-icon{vertical-align:middle;margin-right:3px;font-size:1em}
@@ -559,8 +684,18 @@ title = """
 </div>
 """
 
+#CSS style for scrollable div
+css = """
+.scrollable-console {
+    max-height: 130px;  /* Adjust this value as needed */
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    padding: 10px;
 
-with gr.Blocks() as demo:
+}
+"""
+
+with gr.Blocks(css=css) as demo:
     gr.HTML(title)
     with gr.Row():
         input_image = gr.ImageMask(
@@ -576,34 +711,55 @@ with gr.Blocks() as demo:
         )
         
     with gr.Row():
-        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (for adding details via inpaint)", scale=3)
-        num_images = gr.Slider(value=1, label="Number of Images", minimum=1,maximum=10, step=1, scale=1)
-        auto_save = gr.Checkbox(True, label="Auto-save", scale=1)
-        paste_back = gr.Checkbox(True, label="Paste back original background", scale=1)
-        run_button = gr.Button("Generate", variant="primary", size="sm", scale=2)
-        # unload_vram_btn = gr.Button("Unload VRAM", variant="primary", size = "sm")
-        result_to_input = gr.Button("Use as Input Image", size="sm", scale=1)
-        clear_input_button = gr.Button("Clear", size="sm")
-        unload_all_btn = gr.Button("Unload models", variant="stop", size="sm", scale=1)
+        prompt = gr.Textbox(value="high quality, 4K", label="Prompt (add details for inpaint)", scale=2)
+        num_images = gr.Slider(value=1, label="Number of images", minimum=1, maximum=10, step=1)
+        auto_save = gr.Checkbox(True, label="Auto-save")
+        paste_back = gr.Checkbox(True, label="Paste back background")
+        run_button = gr.Button("Generate", variant="primary", scale=1)
+            
+        with gr.Column(scale=1):
+            with gr.Row():
+                result_to_input = gr.Button("Use as Input", size="sm")
+                clear_input_button = gr.Button("Clear", size="sm")
+                unload_all_btn = gr.Button("Unload models", variant="stop", size="sm")
+     
         
     with gr.Row():
         model_selection = gr.Dropdown(
             choices=list(MODELS.keys()),
-            value="RealVisXL V5.0 Lightning",
-            label="Model",
-            scale=2
+            value=DEFAULT_MODEL,
+            label="Model"
         )
-        guidance_scale = gr.Slider(value=1.5, label="Guidance Scale", minimum=1.5, maximum=8, step=0.5, scale=1)
-        steps = gr.Slider(value=8, label="Steps", minimum=1, maximum=16, step=1, visible=True, scale=1)
-        console_info = gr.HTML(label="Console")
-        resize_slider = gr.Dropdown(
-            choices=[],
-            value=None,
-            label="Resize Options (%)",
-            scale=1,
-            interactive=False
-        )
-        resize_button = gr.Button("Apply Resize", scale=1, size="sm", interactive=False)
+        with gr.Column(scale=1):
+            steps = gr.Slider(
+                value=MODELS[DEFAULT_MODEL]["default_steps"],
+                label="Steps",
+                minimum=1,
+                maximum=MODELS[DEFAULT_MODEL]["max_steps"],
+                step=1,
+                visible=True
+            )
+            guidance_scale = gr.Slider(
+                value=MODELS[DEFAULT_MODEL]["default_guidance"],
+                label="Guidance Scale",
+                minimum=1.5,
+                maximum=MODELS[DEFAULT_MODEL]["max_guidance"],
+                step=0.5
+            )
+        with gr.Column(scale=1):
+            console_info = gr.HTML(
+                value='<div class="scrollable-console"></div>',
+                label="Console"
+            )
+            
+        with gr.Column(scale=1):
+            resize_slider = gr.Dropdown(
+                choices=[],
+                value=None,
+                label="Resize Options (%)",
+                interactive=False
+            )
+            resize_button = gr.Button("Apply Resize", size="sm", interactive=False)
 
 
         
@@ -631,20 +787,17 @@ with gr.Blocks() as demo:
    
     # event handlers        
 
+
     run_button.click(
-        fn=lambda: "Preparing Image Generation...", 
-        inputs=None,
-        outputs=console_info,
-    ).then(
-        fn=init,
-        inputs=None,
+        fn=lambda model: init(model),
+        inputs=[model_selection],
         outputs=console_info
     ).then(
         fn=fill_image,
         inputs=[prompt, input_image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images],
         outputs=[result, gallery, console_info]
     )
-
+    
     clear_gallery_btn.click(
         fn=clear_gallery,
         outputs=[gallery, gallery_status]
@@ -712,4 +865,11 @@ with gr.Blocks() as demo:
             gallery_status
         ]
     )
+    
+    model_selection.change(
+        fn=handle_model_change,
+        inputs=[model_selection],
+        outputs=[steps, guidance_scale, console_info]
+    )
+    
 demo.launch(share=False)

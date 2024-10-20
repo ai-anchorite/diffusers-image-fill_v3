@@ -44,9 +44,10 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a hre
 ## 🖥️ System Requirements & Important Notes
 
 ### Hardware & Storage:
-- 32GB RAM for comfortable operation
-- 16GB VRAM recommended (8GB miiight work, but performance may vary). It's snappy on a 3090.
-- ~20GB free space for download. It downloads the required models on 1st generation (models are shared across apps)
+- 32GB RAM for comfortable operation. I wouldn't try with 16GB system RAM.
+- 16GB+ VRAM recommended (12GB will work, but performance may vary). 
+  I've added the usual VRAM optimizations, and flushing everything as often as possible! But persists in (briefly) touching 12GB VRAM regardless of image size: 1024x1024 == 512x512. It's snappy on a 3090. 
+- ~20GB+ free space for download. It downloads the required models on 1st generation (models are shared across the three apps). Additional models (5-7GB each) can be selected and downloaded in-app.
 
 
 ### For Existing Users
@@ -70,8 +71,9 @@ If you already have Diffusers Image Fill installed in Pinokio:
 - **Project Status:** This is an enhanced proof-of-concept that does what it says on the tin, with room for future improvements. Read the linked guide by <a href="https://huggingface.co/blog/OzzyGT/diffusers-image-fill">OzzyGT</a> for an idea about what's going on under the hood. I prefer dash and interior!
 
 i was planning on combining them into one UI, but gave me a headache.. and video models are dropping left and right!
-* Yes, a model loader would be cool. I tested and didn't really notice an improvement from the half dozen popular models i tried. Also, it's geared for diffusers multi file format and uses a custom SDXLpipeline that doesn't seem to work nicely with `from_single_file`. I also wasn't able to optimize any more than adding in garbage collection and cuda cache. Moving the vae to CPU was less impactful than i'd hoped!
-* Adding FastSAM for inpaint masking would be cool as well. and flux.. 
+* I've added a model loader for the Inpaint app - I'll add it to the outpaint one soon. They're still diffuser format model folders. I'll look into switching to single-file at some point. You can manually add more by editting `app.py`. You can't miss the MODEL library near the top. Has to be diffuser models, ie from Huggingface NOT Civitai (at this stage). Just follow the format of the existing models. They'll automagically appear in the UI model drop-down on next app start. 
+* Will add negative prompt box, and maybe a LoRA loader. Although will be unusable unless you have a 3090/4090...
+* Adding FastSAM for inpaint masking would be cool as well. and switching to flux models...
 * Imo, this is a fantastic app for prepping images for a Flux upscale. It's also great at generative fill compared to other alternatives. I was close to adding an upscaler using the Promax ControlNet, but I can't afford to spend anymore time on it! 
 
 * oh, and it's mostly written by ClaudeAI ;) long as you know what you want, you can eventually do it. just have to watch for its love for creating new functions to fix broken functions.. and next minute you have half a dozen functions related to resizing an input image haha! it's effective but messy. i could spend ages refactoring, but it works well enough :)

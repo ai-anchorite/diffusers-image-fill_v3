@@ -46,7 +46,7 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a hre
 ### Hardware & Storage:
 - 32GB RAM for comfortable operation. I wouldn't try with 16GB system RAM.
 - 16GB+ VRAM recommended (12GB will work, but performance may vary). 
-  I've added the usual VRAM optimizations, and flushing everything as often as possible! But persists in (briefly) touching 12GB VRAM regardless of image size: 1024x1024 == 512x512. It's snappy on a 3090. 
+  I've added the usual VRAM optimizations, and flushing everything as often as possible! But persists in (briefly) touching 12GB VRAM regardless of image size: better than 16GB+ at least! I'll keep tweaking things for a few days before calling it done.
 - ~20GB+ free space for download. It downloads the required models on 1st generation (models are shared across the three apps). Additional models (5-7GB each) can be selected and downloaded in-app.
 
 

@@ -72,6 +72,7 @@ If you already have Diffusers Image Fill installed in Pinokio:
 i was planning on combining them into one UI, but gave me a headache.. and video models are dropping left and right!
 * I've added a model loader for the Inpaint app - I'll add it to the outpaint one soon. They're still diffuser format model folders. I'll look into switching to single-file at some point. You can manually add more by editting `app.py`. You can't miss the MODEL library near the top. Has to be diffuser models, ie from Huggingface NOT Civitai (at this stage). Just follow the format of the existing models. They'll automagically appear in the UI model drop-down on next app start. 
 * Will add negative prompt box, and maybe a LoRA loader. Although will be unusable unless you have a 3090/4090...
+* oh and the Zoom app. it's pretty cool, but i just haven't had time to even start on it.  you could smooth it out; increase the resolution, which would greatly improve quality; and steer the zoom, re-using the Outpaint app's masking functions... The world is a giant playpen. so many toys! :)
 * Adding FastSAM for inpaint masking would be cool as well. and switching to flux models...
 * Imo, this is a fantastic app for prepping images for a Flux upscale. It's also great at generative fill compared to other alternatives. I was close to adding an upscaler using the Promax ControlNet, but I can't afford to spend anymore time on it! 
 

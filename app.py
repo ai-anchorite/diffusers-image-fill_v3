@@ -50,7 +50,7 @@ MODELS = {
         "max_steps": 50,
         "default_guidance": 5,
         "max_guidance": 10,
-        "description": "Good versatile realistism model.",
+        "description": "Good versatile realism model.",
         "web_link": "https://civitai.com/models/312530/cyberrealistic-xl",
         "supports_fp16": False
     },

@@ -76,15 +76,6 @@ MODELS = {
         "description": "NSFW - For experimental purposes.",
         "web_link": "https://civitai.com/models/573152?modelVersionId=639425"
     },
-        "AnimagineXL 3.0": {
-        "path": "Linaqruf/animagine-xl-3.0",
-        "default_steps": 20,
-        "max_steps": 50,
-        "default_guidance": 5,
-        "max_guidance": 10,
-        "description": "Anime focused model.",
-        "web_link": "https://civitai.com/models/260267?modelVersionId=293564"
-    },
     
     # Add other models here following the exact format as above. Only diffusers models, ie from huggingface not civitai.
 }

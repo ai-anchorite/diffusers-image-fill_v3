@@ -3,10 +3,8 @@ import torch
 import devicetorch
 import os
 import webbrowser #for opening the outputs folder. seemed the best way for cross-platform compatibility.
-# import math
 import gc
 import numpy as np
-import psutil
 
 from diffusers import AutoencoderKL, TCDScheduler
 from diffusers.models.model_loading_utils import load_state_dict
@@ -30,9 +28,8 @@ MODELS = {
         "max_steps": 16,
         "default_guidance": 1.5,
         "max_guidance": 8.0,
-        "description": "For high-quality realistic image generation.",
-        "web_link": "https://civitai.com/models/139562/realvisxl-v50",
-        "supports_fp16": False
+        "description": "For fast image generation.",
+        "web_link": "https://civitai.com/models/139562/realvisxl-v50"
     },
         "RealismEngineSDXL v30": {
         "path": "misri/realismEngineSDXL_v30VAE",
@@ -41,8 +38,7 @@ MODELS = {
         "default_guidance": 4,
         "max_guidance": 10,
         "description": "Realism model.",
-        "web_link": "https://civitai.com/models/152525/realism-engine-sdxl",
-        "supports_fp16": False
+        "web_link": "https://civitai.com/models/152525/realism-engine-sdxl"
     },
         "Cyberrealistic v31": {
         "path": "John6666/cyberrealistic-xl-v31-sdxl",
@@ -50,9 +46,8 @@ MODELS = {
         "max_steps": 50,
         "default_guidance": 5,
         "max_guidance": 10,
-        "description": "Good versatile realism model.",
-        "web_link": "https://civitai.com/models/312530/cyberrealistic-xl",
-        "supports_fp16": False
+        "description": "Good versatile model.",
+        "web_link": "https://civitai.com/models/312530/cyberrealistic-xl"
     },
         "Leosams HelloWorldXL 7.0": {
         "path": "misri/leosamsHelloworldXL_helloworldXL70",
@@ -61,8 +56,7 @@ MODELS = {
         "default_guidance": 4,
         "max_guidance": 10,
         "description": "Acclaimed multi-purpose model.",
-        "web_link": "https://civitai.com/models/43977/leosams-helloworld-xl",
-        "supports_fp16": False
+        "web_link": "https://civitai.com/models/43977/leosams-helloworld-xl"
     },
         # "Pornograffiti V10": {
         # "path": "John6666/pornograffiti-v10-sdxl",
@@ -70,31 +64,29 @@ MODELS = {
         # "max_steps": 50,
         # "default_guidance": 5,
         # "max_guidance": 10,
-        # "description": "NSFW - For experimental purposess.",
-        # "web_link": "https://civitai.com/models/863290/pornograffiti?modelVersionId=965940#_",
-        # "supports_fp16": False
-    # },
+        # "description": "NSFW - For experimental purposes.",
+        # "web_link": "https://civitai.com/models/863290/pornograffiti?modelVersionId=965940#_"
+   # },
         "Lustify V1 Lightning": {
         "path": "GraydientPlatformAPI/lustify-lightning",
         "default_steps": 6,
         "max_steps": 16,
         "default_guidance": 1.5,
         "max_guidance": 5,
-        "description": "NSFW - For experimental purposess.",
-        "web_link": "https://civitai.com/models/573152?modelVersionId=639425",
-        "supports_fp16": False
+        "description": "NSFW - For experimental purposes.",
+        "web_link": "https://civitai.com/models/573152?modelVersionId=639425"
     },
-        # "Lustify V4": {
-        # "path": "John6666/lustify-sdxl-nsfwsfw-v4-sdxl",
-        # "default_steps": 30,
-        # "max_steps": 50,
-        # "default_guidance": 4,
-        # "max_guidance": 10,
-        # "description": "NSFW - For experimental purposess.",
-        # "web_link": "https://civitai.com/models/573152/lustify-sdxl-nsfw-and-sfw-checkpoint?modelVersionId=926965",
-        # "supports_fp16": False
-    # },
-    # Add other models here, setting "supports_fp16" to False if they don't specifically list an fp16 variant
+        "AnimagineXL 3.0": {
+        "path": "Linaqruf/animagine-xl-3.0",
+        "default_steps": 20,
+        "max_steps": 50,
+        "default_guidance": 5,
+        "max_guidance": 10,
+        "description": "Anime focused model.",
+        "web_link": "https://civitai.com/models/260267?modelVersionId=293564"
+    },
+    
+    # Add other models here following the exact format as above. Only diffusers models, ie from huggingface not civitai.
 }
 
 
@@ -128,91 +120,76 @@ selected_image_index = None
 def init(model_selection, progress=gr.Progress()):
     global pipe, current_model
 
-    if pipe is not None and current_model != model_selection:
-        progress(0.1, desc="Unloading previous model")
-        unload_message = unload_all(progress)
-        progress(0.2, desc=unload_message)
+    try:
+        if pipe is not None and current_model != model_selection:
+            progress(0.1, desc="Unloading previous model")
+            unload_message = unload_all(progress)
+            progress(0.2, desc=unload_message)
 
-    if pipe is None:
-        progress(0.3, desc="Starting model initialization")
-        
-        progress(0.4, desc="Loading ControlNet configuration")
-        config_file = hf_hub_download(
-            "xinsir/controlnet-union-sdxl-1.0",
-            filename="config_promax.json",
-        )
-        config = ControlNetModel_Union.load_config(config_file)
-        controlnet_model = ControlNetModel_Union.from_config(config)
-        
-        progress(0.5, desc="Downloading ControlNet model")
-        model_file = hf_hub_download(
-            "xinsir/controlnet-union-sdxl-1.0",
-            filename="diffusion_pytorch_model_promax.safetensors",
-        )
-        
-        progress(0.6, desc="Loading ControlNet model")
-        state_dict = load_state_dict(model_file)
-        model, _, _, _, _ = ControlNetModel_Union._load_pretrained_model(
-            controlnet_model, state_dict, model_file, "xinsir/controlnet-union-sdxl-1.0"
-        )
-        model.to(torch.float16)
+        if pipe is None:
+            progress(0.3, desc="Starting model initialization")
+            
+            try:
+                progress(0.4, desc="Loading ControlNet configuration")
+                config_file = hf_hub_download(
+                    "xinsir/controlnet-union-sdxl-1.0",
+                    filename="config_promax.json",
+                )
+                config = ControlNetModel_Union.load_config(config_file)
+                controlnet_model = ControlNetModel_Union.from_config(config)
+                
+                progress(0.5, desc="Downloading ControlNet model")
+                model_file = hf_hub_download(
+                    "xinsir/controlnet-union-sdxl-1.0",
+                    filename="diffusion_pytorch_model_promax.safetensors",
+                )
+                
+                progress(0.6, desc="Loading ControlNet model")
+                state_dict = load_state_dict(model_file)
+                model, _, _, _, _ = ControlNetModel_Union._load_pretrained_model(
+                    controlnet_model, state_dict, model_file, "xinsir/controlnet-union-sdxl-1.0"
+                )
+                model.to(DEVICE, dtype=torch.float16)
 
-        progress(0.7, desc="Loading VAE")
-        vae = AutoencoderKL.from_pretrained(
-            "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
-        )
+                progress(0.7, desc="Loading VAE")
+                vae = AutoencoderKL.from_pretrained(
+                    "madebyollin/sdxl-vae-fp16-fix", torch_dtype=torch.float16
+                ).to(DEVICE)
 
-        progress(0.8, desc=f"Loading main pipeline: {model_selection}")
-        
-        pipe = StableDiffusionXLFillPipeline.from_pretrained(
-            MODELS[model_selection]["path"],
-            torch_dtype=torch.float16,
-            controlnet=model,
-            vae=vae,
-            use_safetensors=True,
-            # variant="fp16",
-        )
-        
-        # Enable memory efficient attention if xformers is available
-        if is_xformers_available():
-            pipe.enable_xformers_memory_efficient_attention()
-        
-        # Enable CPU offloading
-        pipe.enable_model_cpu_offload()
+                progress(0.8, desc=f"Loading main pipeline: {model_selection}.   1st load slow - downloading model and/or loading from storage.")
+                pipe = StableDiffusionXLFillPipeline.from_pretrained(
+                    MODELS[model_selection]["path"],
+                    torch_dtype=torch.float16,
+                    controlnet=model,
+                    vae=vae,
+                    use_safetensors=True,
+                ).to(DEVICE)
+                
+                progress(0.9, desc="Setting up scheduler")
+                pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
+                
+                # if is_xformers_available():
+                    # pipe.enable_xformers_memory_efficient_attention()
+                
+                current_model = model_selection
+                progress(1.0, desc="Model loading complete")
+                return f"Model {model_selection} loaded successfully with optimizations for lower VRAM usage."
+            except Exception as e:
+                return f"Error loading model {model_selection}: {str(e)}"
+        else:
+            return f"Model {model_selection} is already loaded."
+    except Exception as e:
+        return f"Unexpected error initializing model: {str(e)}"
 
-        progress(0.9, desc="Setting up scheduler")
-        pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
-        
-        current_model = model_selection
-        progress(1.0, desc="Model loading complete")
-        return f"Model {model_selection} loaded successfully with optimizations for lower VRAM usage."
-    else:
-        return f"Model {model_selection} is already loaded."
-        
-
+    
 def cleanup_tensors():
     # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
+    gc.collect()
     
-    # Force garbage collection to run multiple times
-    for _ in range(3):
-        gc.collect()
     
-    # Attempt to release memory back to the system
-    psutil.Process().memory_full_info()
-    
-    # Clear any remaining interprocess communication (IPC) resources
-    if hasattr(torch.cuda, 'ipc_collect'):
-        torch.cuda.ipc_collect()
-
-    # Clear unused memory from the memory pool
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
-
-
 def unload_all(progress=gr.Progress()):
     global pipe, current_model
     
@@ -236,12 +213,7 @@ def unload_all(progress=gr.Progress()):
             torch.cuda.ipc_collect()
 
         # Force garbage collection
-        for _ in range(3):
-            gc.collect()
-
-        # Attempt to release memory back to the system
-        import psutil
-        psutil.Process().memory_full_info()
+        gc.collect()
 
         progress(1.0, desc="Unload complete")
         return "Models unloaded and memory cleared. New models will be loaded when needed."
@@ -253,82 +225,86 @@ def unload_all(progress=gr.Progress()):
 def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images):
     global latest_result, gallery_images, global_image, pipe
     
-    if image is None:
-        return (None, None), gr.update(), "Error: No input image provided. Please upload an image first."
-        
-    # Check if we need to change the model
-    if pipe is None or current_model != model_selection:
-        init_message = init(model_selection)
-        yield (None, None), gr.update(), f"{init_message} Preparing for image generation..."
-    
-    source = global_image 
-    mask = image["layers"][0]
-
-    # Ensure source image meets size requirements
-    source = resize_image(source, min_size=MIN_IMAGE_SIZE, scale_factor=VAE_SCALE_FACTOR)
-    
-    # Resize mask to match source image size
-    mask = mask.resize(source.size, Image.LANCZOS)
-    
-    alpha_channel = mask.split()[3]
-    binary_mask = alpha_channel.point(lambda p: p > 0 and 255)
-    cnet_image = source.copy()
-    cnet_image.paste(0, (0, 0), binary_mask)
-
-    (
-        prompt_embeds,
-        negative_prompt_embeds,
-        pooled_prompt_embeds,
-        negative_pooled_prompt_embeds,
-    ) = pipe.encode_prompt(prompt, DEVICE, True)
-
-    all_results = []
-    
-    for n in range(num_images):
-        intermediate_images = []
-        
-        yield (source, cnet_image), gr.update(), f"Starting generation of image {n+1} of {num_images}..."
-        
-        for image in pipe(
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
-            guidance_scale=guidance_scale,
-            num_inference_steps=steps,
-            image=cnet_image,
-        ):
-            yield (image, cnet_image), gr.update(), f"Generating image {n+1} of {num_images}..."
-            intermediate_images.append(image)
-
-        final_image = intermediate_images[-1]
-        if paste_back:
-            final_image = final_image.convert("RGBA")
-            result_image = cnet_image.copy()
-            result_image.paste(final_image, (0, 0), binary_mask)
-        else:
-            result_image = final_image.convert("RGBA")
+    try:
+        if image is None:
+            return (None, None), gr.update(), "Error: No input image provided. Please upload an image first."
             
-        all_results.append(result_image)
-        gallery_update = update_gallery(result_image, auto_save)
+        if pipe is None or current_model != model_selection:
+            init_message = init(model_selection)
+            yield (None, None), gr.update(), f"{init_message} Preparing for image generation..."
         
-        yield (source, result_image), gallery_update,  f"Completed image {n+1} of {num_images}"
-        
-        # Clear cache after each generation
-        cleanup_tensors()
-        
-    if all_results:
-        latest_result = all_results[-1]
-    else:
-        latest_result = None
+        source = global_image 
+        mask = image["layers"][0]
 
-    if latest_result is not None:
-        yield (source, latest_result), gallery_update, "All images generated successfully!"
-    else:
-        yield (source, source), gallery_update, "No images were generated successfully."
+        source = resize_image(source, min_size=MIN_IMAGE_SIZE, scale_factor=VAE_SCALE_FACTOR)
+        mask = mask.resize(source.size, Image.LANCZOS)
+        
+        alpha_channel = mask.split()[3]
+        binary_mask = alpha_channel.point(lambda p: p > 0 and 255)
+        cnet_image = source.copy()
+        cnet_image.paste(0, (0, 0), binary_mask)
+
+        try:
+            (
+                prompt_embeds,
+                negative_prompt_embeds,
+                pooled_prompt_embeds,
+                negative_pooled_prompt_embeds,
+            ) = pipe.encode_prompt(prompt, DEVICE, True)
+        except Exception as e:
+            yield (None, None), gr.update(), f"Error encoding prompt: {str(e)}"
+            return
+
+        all_results = []
+        
+        for n in range(num_images):
+            intermediate_images = []
+            
+            yield (source, cnet_image), gr.update(), f"Starting generation of image {n+1} of {num_images}..."
+            
+            try:
+                for image in pipe(
+                    prompt_embeds=prompt_embeds,
+                    negative_prompt_embeds=negative_prompt_embeds,
+                    pooled_prompt_embeds=pooled_prompt_embeds,
+                    negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+                    guidance_scale=guidance_scale,
+                    num_inference_steps=steps,
+                    image=cnet_image,
+                ):
+                    yield (image, cnet_image), gr.update(), f"Generating image {n+1} of {num_images}..."
+                    intermediate_images.append(image)
+
+                final_image = intermediate_images[-1]
+                if paste_back:
+                    final_image = final_image.convert("RGBA")
+                    result_image = cnet_image.copy()
+                    result_image.paste(final_image, (0, 0), binary_mask)
+                else:
+                    result_image = final_image.convert("RGBA")
+                    
+                all_results.append(result_image)
+                gallery_update = update_gallery(result_image, auto_save)
+                
+                yield (source, result_image), gallery_update, f"Completed image {n+1} of {num_images}"
+            
+            except Exception as e:
+                yield (None, None), gr.update(), f"Error generating image {n+1}: {str(e)}"
+            
+            finally:
+                cleanup_tensors()
+            
+        if all_results:
+            latest_result = all_results[-1]
+            yield (source, latest_result), gallery_update, "All images generated successfully!"
+        else:
+            yield (source, source), gallery_update, "No images were generated successfully."
+        
+    except Exception as e:
+        yield (None, None), gr.update(), f"Unexpected error during image generation: {str(e)}"
     
-    cleanup_tensors() 
-    
+    finally:
+        cleanup_tensors()
     
 
 def clear_gallery():
@@ -351,19 +327,6 @@ def open_outputs_folder():
     except Exception as e:
         return f"Error opening outputs folder: {str(e)}"
 
-    
-# def set_img(image, size_slider):
-    # global global_image
-    # if image is None or image["background"] is None:
-        # return gr.update(value="No image loaded"), gr.update()
-    
-    # global_image = image["background"]
-    # min_percentage = calculate_min_resize_percentage(global_image)
-    
-    # return (
-        # update_image_info(size_slider),
-        # gr.update(minimum=min_percentage)
-    # )
     
 def resize_image(image, min_size=MIN_IMAGE_SIZE, scale_factor=VAE_SCALE_FACTOR):
     width, height = image.size
@@ -401,7 +364,7 @@ def preview_resize(percentage):
         return f"Cannot resize below minimum allowed size of {MIN_IMAGE_SIZE}x{MIN_IMAGE_SIZE}."
     
     mp = (new_w * new_h) / 1000000
-    estimated_vram = 8.0 + (mp * 4) + 1.0
+    estimated_vram = 10.0 + (mp * 4) + 1.0
     
     if percentage == 100:
         resize_info = '<p style="color: #4CAF50;">Image is at 100% of its original size. No resize needed.</p>'
@@ -483,7 +446,7 @@ def update_resize_controls(image):
     
     width, height = global_original_image.size
     mp = (width * height) / 1000000
-    estimated_vram = 8.0 + (mp * 4) + 1.0
+    estimated_vram = 10.0 + (mp * 4) + 1.0
     
     resize_options = calculate_resize_options(global_original_image)
     
@@ -783,10 +746,8 @@ with gr.Blocks(css=css) as demo:
         save_selected_btn = gr.Button("Save Selected", scale=2)
         send_selected_to_input_btn = gr.Button("Send Selected to Input", scale=1)  
    
-   
-   
-    # event handlers        
 
+    # event handlers        
 
     run_button.click(
         fn=lambda model: init(model),

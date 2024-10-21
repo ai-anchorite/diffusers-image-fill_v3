@@ -43,6 +43,7 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a hre
 
 ## 🖥️ System Requirements & Important Notes
 
+Definitely in Beta mode atm. 
 
 ### Hardware & Storage:
 - 32GB RAM for comfortable operation. I wouldn't try with 16GB system RAM.

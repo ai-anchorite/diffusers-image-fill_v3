@@ -67,16 +67,7 @@ MODELS = {
         # "description": "NSFW - For experimental purposes.",
         # "web_link": "https://civitai.com/models/863290/pornograffiti?modelVersionId=965940#_"
    # },
-        "Lustify V1 Lightning": {
-        "path": "GraydientPlatformAPI/lustify-lightning",
-        "default_steps": 6,
-        "max_steps": 16,
-        "default_guidance": 1.5,
-        "max_guidance": 5,
-        "description": "NSFW - For experimental purposes.",
-        "web_link": "https://civitai.com/models/573152?modelVersionId=639425"
-    },
-    
+        
     # Add other models here following the exact format as above. Only diffusers models, ie from huggingface not civitai.
 }
 
@@ -164,7 +155,7 @@ def init(model_selection, progress=gr.Progress()):
                 
                 current_model = model_selection
                 progress(1.0, desc="Model loading complete")
-                return f"Model {model_selection} loaded successfully with optimizations for lower VRAM usage."
+                return f"Model {model_selection} loaded successfully."
             except Exception as e:
                 return f"Error loading model {model_selection}: {str(e)}"
         else:

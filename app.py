@@ -10,7 +10,7 @@ from diffusers import AutoencoderKL, TCDScheduler
 from diffusers.models.model_loading_utils import load_state_dict
 from controlnet_union import ControlNetModel_Union
 from pipeline_fill_sd_xl import StableDiffusionXLFillPipeline
-from diffusers.utils import is_xformers_available
+# from diffusers.utils import is_xformers_available
 
 from huggingface_hub import hf_hub_download
 from gradio_imageslider import ImageSlider
@@ -40,23 +40,14 @@ MODELS = {
         "description": "Realism model.",
         "web_link": "https://civitai.com/models/152525/realism-engine-sdxl"
     },
-        "Cyberrealistic v31": {
-        "path": "John6666/cyberrealistic-xl-v31-sdxl",
-        "default_steps": 25,
-        "max_steps": 50,
-        "default_guidance": 5,
-        "max_guidance": 10,
-        "description": "Good versatile model.",
-        "web_link": "https://civitai.com/models/312530/cyberrealistic-xl"
-    },
-        "Leosams HelloWorldXL 7.0": {
-        "path": "misri/leosamsHelloworldXL_helloworldXL70",
-        "default_steps": 30,
-        "max_steps": 50,
-        "default_guidance": 4,
-        "max_guidance": 10,
-        "description": "Acclaimed multi-purpose model.",
-        "web_link": "https://civitai.com/models/43977/leosams-helloworld-xl"
+        "Big Lust v1.5": {
+        "path": "John6666/big-lust-v15-sdxl",
+        "default_steps": 40,
+        "max_steps": 80,
+        "default_guidance": 6,
+        "max_guidance": 10.0,
+        "description": "For experimental purposes. requires high steps.",
+        "web_link": "https://civitai.com/models/575395/big-lust?modelVersionId=929239"
     },
         # "Pornograffiti V10": {
         # "path": "John6666/pornograffiti-v10-sdxl",
@@ -67,22 +58,21 @@ MODELS = {
         # "description": "NSFW - For experimental purposes.",
         # "web_link": "https://civitai.com/models/863290/pornograffiti?modelVersionId=965940#_"
    # },
-        
+
     # Add other models here following the exact format as above. Only diffusers models, ie from huggingface not civitai.
 }
 
+# You can change this to any model in your MODELS dictionary
+DEFAULT_MODEL = "RealVisXL V5.0 Lightning"  
 
-DEFAULT_MODEL = "RealVisXL V5.0 Lightning"  # You can change this to any model in your MODELS dictionary
-
-# Ensure the default model exists in the MODELS dictionary
+# If the default model is not in MODELS, use the first model in the dictionary
 if DEFAULT_MODEL not in MODELS:
-    # If the default model is not in MODELS, use the first model in the dictionary
     DEFAULT_MODEL = next(iter(MODELS))
     
-    
+
 MAX_GALLERY_IMAGES = 20 
-MIN_IMAGE_SIZE = 512 
-OUTPUT_DIR = "outputs" 
+MIN_IMAGE_SIZE = 512  
+OUTPUT_DIR = "outputs" #replace with "C:\path\to\savefolder" if desired.
 VAE_SCALE_FACTOR = 8
 
 global pipe
@@ -155,7 +145,7 @@ def init(model_selection, progress=gr.Progress()):
                 
                 current_model = model_selection
                 progress(1.0, desc="Model loading complete")
-                return f"Model {model_selection} loaded successfully."
+                return f"Model {model_selection} loaded successfully with optimizations for lower VRAM usage."
             except Exception as e:
                 return f"Error loading model {model_selection}: {str(e)}"
         else:
@@ -164,45 +154,6 @@ def init(model_selection, progress=gr.Progress()):
         return f"Unexpected error initializing model: {str(e)}"
 
     
-def cleanup_tensors():
-    # Clear CUDA cache
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
-    gc.collect()
-    
-    
-def unload_all(progress=gr.Progress()):
-    global pipe, current_model
-    
-    progress(0.1, desc="Starting unload process")
-
-    try:
-        # Unload pipeline
-        if pipe is not None:
-            for component in ['unet', 'vae', 'controlnet', 'text_encoder', 'text_encoder_2', 'scheduler']:
-                if hasattr(pipe, component):
-                    setattr(pipe, component, None)
-            del pipe
-            pipe = None
-
-        # Reset current model
-        current_model = None
-
-        # Clear CUDA cache
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.ipc_collect()
-
-        # Force garbage collection
-        gc.collect()
-
-        progress(1.0, desc="Unload complete")
-        return "Models unloaded and memory cleared. New models will be loaded when needed."
-    except Exception as e:
-        progress(1.0, desc="Unload failed")
-        return f"Error during unload process: {str(e)}"
-
    
 def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back, auto_save, num_images):
     global latest_result, gallery_images, global_image, pipe
@@ -289,45 +240,77 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
         cleanup_tensors()
     
 
-def clear_gallery():
-    global gallery_images, selected_gallery_image
-    gallery_images.clear()
-    selected_gallery_image = None
-    return gr.update(value=None), gr.update(value=None), "Selected image no longer in gallery"
+def cleanup_tensors():
+    # Clear CUDA cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    gc.collect()
     
+
+# via UI button to release resources while between tasks. called to clear out previous pipe when changing model
+def unload_all(progress=gr.Progress()):
+    global pipe, current_model
     
-def clear_input_and_result():
-    return gr.update(value=None), gr.update(value=None), "Input and result cleared."  
-  
-  
-def open_outputs_folder():
+    progress(0.1, desc="Starting unload process")
+
     try:
-        Path(OUTPUT_DIR).mkdir(exist_ok=True)
-        folder_uri = Path(OUTPUT_DIR).absolute().as_uri()
-        webbrowser.open(folder_uri)
-        return "Opened outputs folder (folder can be shy and hide behind active windows)."
+        # Unload pipeline
+        if pipe is not None:
+            for component in ['unet', 'vae', 'controlnet', 'text_encoder', 'text_encoder_2', 'scheduler']:
+                if hasattr(pipe, component):
+                    setattr(pipe, component, None)
+            del pipe
+            pipe = None
+
+        # Reset current model
+        current_model = None
+
+        # Clear CUDA cache
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+
+        # Force garbage collection
+        gc.collect()
+
+        progress(1.0, desc="Unload complete")
+        return "Models unloaded and memory cleared. New models will be loaded when needed."
     except Exception as e:
-        return f"Error opening outputs folder: {str(e)}"
+        progress(1.0, desc="Unload failed")
+        return f"Error during unload process: {str(e)}"
+
+   
+# from UI button    
+def send_to_input(result_slider):
+    if latest_result is not None and result_slider is not None:
+        global global_image
+        global_image = latest_result
+        resize_slider, resize_button, info = update_resize_controls({"background": latest_result})
+        return gr.update(value=latest_result), gr.update(value=None), resize_slider, resize_button, info
+
+    return gr.update(), gr.update(), gr.update(), gr.update(), "No result to send to input"
+
+
+# from UI button  
+def clear_input_and_result():
+    return gr.update(value=None), gr.update(value=None), "Input and result cleared." 
+    
+    
+
+# Sizing Functions. Yes, requires refactoring. may add upscaling options and presets
+
+# triggered on new input image for sizing info    
+def handle_image_upload(image):
+    if image is None:
+        return gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), "No image loaded. Please upload an image."
+    
+    # Process the image
+    resize_slider, resize_button, info = update_resize_controls(image)
+    return resize_slider, resize_button, info
 
     
-def resize_image(image, min_size=MIN_IMAGE_SIZE, scale_factor=VAE_SCALE_FACTOR):
-    width, height = image.size
-    
-    # Ensure minimum size
-    if width < min_size or height < min_size:
-        scale = max(min_size / width, min_size / height)
-        new_width = int(width * scale)
-        new_height = int(height * scale)
-    else:
-        new_width, new_height = width, height
-    
-    # Round to nearest multiple of scale_factor
-    new_width = ((new_width + scale_factor - 1) // scale_factor) * scale_factor
-    new_height = ((new_height + scale_factor - 1) // scale_factor) * scale_factor
-    
-    return image.resize((new_width, new_height), Image.LANCZOS)
-    
-    
+# Resize slider.  checks for available resize options and displays relavent info to console
 def preview_resize(percentage):
     global global_image, global_original_image
     if global_original_image is None:
@@ -362,7 +345,7 @@ def preview_resize(percentage):
 {resize_info}
 """
 
-
+# pre-calculating resize for update_resize_controls
 def calculate_resize_options(image):
     if image is None:
         return []
@@ -410,7 +393,7 @@ def calculate_resize_options(image):
     
     return sorted(valid_options, reverse=True)
 
-
+# updates the sizer and console with the available options for the newly loaded image
 def update_resize_controls(image):
     global global_image, global_original_image
     if image is None or (isinstance(image, dict) and image.get("background") is None):
@@ -448,8 +431,8 @@ def update_resize_controls(image):
         gr.update(interactive=bool(resize_options)),
         info_text
     )
-    
-
+ 
+# from resize button. always applying resize to original image NEVER to a copy
 def apply_resize(percentage):
     global global_image, global_original_image
     if global_original_image is None:
@@ -471,24 +454,29 @@ def apply_resize(percentage):
     return global_image, message + "<br>" + info, resize_slider, resize_button
 
 
-def send_to_input(result_slider):
-    if latest_result is not None and result_slider is not None:
-        global global_image
-        global_image = latest_result
-        resize_slider, resize_button, info = update_resize_controls({"background": latest_result})
-        return gr.update(value=latest_result), gr.update(value=None), resize_slider, resize_button, info
-    return gr.update(), gr.update(), gr.update(), gr.update(), "No result to send to input"
-
+# from fill_image -redundant?
+def resize_image(image, min_size=MIN_IMAGE_SIZE, scale_factor=VAE_SCALE_FACTOR):
+    width, height = image.size
     
-def handle_image_upload(image):
-    if image is None:
-        return gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), "No image loaded. Please upload an image."
+    # Ensure minimum size
+    if width < min_size or height < min_size:
+        scale = max(min_size / width, min_size / height)
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+    else:
+        new_width, new_height = width, height
     
-    # Process the image
-    resize_slider, resize_button, info = update_resize_controls(image)
-    return resize_slider, resize_button, info
+    # Round to nearest multiple of scale_factor
+    new_width = ((new_width + scale_factor - 1) // scale_factor) * scale_factor
+    new_height = ((new_height + scale_factor - 1) // scale_factor) * scale_factor
+    
+    return image.resize((new_width, new_height), Image.LANCZOS)
+    
+    
+    
+# Gallery functions:
 
-
+# from fill_image
 def update_gallery(result_image, auto_save):
     global gallery_images
     
@@ -503,7 +491,24 @@ def update_gallery(result_image, auto_save):
     
     return gr.update(value=list(gallery_images))
     
+# from UI button    
+def clear_gallery():
+    global gallery_images, selected_gallery_image
+    gallery_images.clear()
+    selected_gallery_image = None
+    return gr.update(value=None), gr.update(value=None), "Selected image no longer in gallery"
     
+# from UI button   
+def open_outputs_folder():
+    try:
+        Path(OUTPUT_DIR).mkdir(exist_ok=True)
+        folder_uri = Path(OUTPUT_DIR).absolute().as_uri()
+        webbrowser.open(folder_uri)
+        return "Opened outputs folder (folder can be shy and hide behind active windows)."
+    except Exception as e:
+        return f"Error opening outputs folder: {str(e)}"
+        
+# from gallery.select        
 def update_selected_image(evt: gr.SelectData):
     global selected_gallery_image, selected_image_index
     if evt.index < len(gallery_images):
@@ -513,7 +518,7 @@ def update_selected_image(evt: gr.SelectData):
         return f"Selected image: {filename}"
     return "Invalid selection"
 
-
+# from UI button 
 def save_selected_image(gallery_state):
     global selected_image_index
     if selected_image_index is None or gallery_state is None:
@@ -544,7 +549,7 @@ def save_selected_image(gallery_state):
         print(f"Error details: {str(e)}")
         return f"Error saving image: {str(e)}"
         
-
+# from UI button 
 def send_selected_to_input():
     global selected_gallery_image, global_image, global_original_image
     try:
@@ -568,7 +573,8 @@ def send_selected_to_input():
         print(f"Error sending image to input: {str(e)}")
         return gr.update(), gr.update(value=None, choices=[], interactive=False), gr.update(interactive=False), gr.update(), f"Error sending image to input: {str(e)}"
         
-        
+
+# combine function with save_selected_image?
 def save_output(latest_result, auto_save, filename):
     try:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -585,7 +591,8 @@ def save_output(latest_result, auto_save, filename):
         print(f"Error handling image path/save: {e}")
         return None, None
  
- 
+  
+# update console with model info from library          
 def update_model_info(model_selection):
     model_info = MODELS[model_selection]
     sea_green = "#20B2AA"  # Light Sea Green color
@@ -611,12 +618,15 @@ def update_model_info(model_selection):
         gr.update(value=model_info["default_guidance"], maximum=model_info["max_guidance"]),
         console_html
     )
-    
+
+# update UI elements when changing models    
 def handle_model_change(model_selection):
     steps, guidance_scale, console_info = update_model_info(model_selection)
     # console_info += "<p>Model settings updated. The new model will be loaded when you start generation.</p>"
     return steps, guidance_scale, console_info
-    
+  
+
+#UI title bar  
 title = """
 <style>
 .title-container{text-align:center;margin:auto;padding:8px 12px;background:linear-gradient(to bottom,#162828,#101c1c);color:#fff;border-radius:8px;font-family:Arial,sans-serif;border:2px solid #0a1212;box-shadow:0 2px 4px rgba(0,0,0,0.1);position:relative}.title-container h1{font-size:2em;margin:0 0 5px;font-weight:300;color:#ff6b35}.title-container p{color:#b0c4c4;font-size:0.9em;margin:0 0 5px}.title-container a{color:#ff6b35;text-decoration:none;transition:color 0.3s ease}.title-container a:hover{color:#ff8c5a}.links-left,.links-right{position:absolute;bottom:5px;font-size:0.8em;color:#a0a0a0}.links-left{left:10px}.links-right{right:10px}.emoji-icon{vertical-align:middle;margin-right:3px;font-size:1em}
@@ -629,7 +639,8 @@ title = """
 </div>
 """
 
-#CSS style for scrollable div
+
+#CSS style for scrollable console. added to limit gr.HTML vertical growth
 css = """
 .scrollable-console {
     max-height: 130px;  /* Adjust this value as needed */

@@ -2,7 +2,7 @@ import gradio as gr
 import torch
 import devicetorch
 import os
-import webbrowser #for opening the outputs folder. seemed the best way for cross-platform compatibility.
+import webbrowser # for opening the outputs folder. seemed the best way for cross-platform compatibility.
 import gc
 import numpy as np
 
@@ -33,7 +33,7 @@ MODELS = {
     },
         "RealismEngineSDXL v30": {
         "path": "misri/realismEngineSDXL_v30VAE",
-        "default_steps": 25,
+        "default_steps": 30,
         "max_steps": 50,
         "default_guidance": 4,
         "max_guidance": 10,
@@ -43,21 +43,12 @@ MODELS = {
         "Big Lust v1.5": {
         "path": "John6666/big-lust-v15-sdxl",
         "default_steps": 40,
-        "max_steps": 80,
+        "max_steps": 50,
         "default_guidance": 6,
         "max_guidance": 10.0,
         "description": "For experimental purposes. requires high steps.",
         "web_link": "https://civitai.com/models/575395/big-lust?modelVersionId=929239"
     },
-        # "Pornograffiti V10": {
-        # "path": "John6666/pornograffiti-v10-sdxl",
-        # "default_steps": 20,
-        # "max_steps": 50,
-        # "default_guidance": 5,
-        # "max_guidance": 10,
-        # "description": "NSFW - For experimental purposes.",
-        # "web_link": "https://civitai.com/models/863290/pornograffiti?modelVersionId=965940#_"
-   # },
 
     # Add other models here following the exact format as above. Only diffusers models, ie from huggingface not civitai.
 }
@@ -72,12 +63,13 @@ if DEFAULT_MODEL not in MODELS:
 
 MAX_GALLERY_IMAGES = 20 
 MIN_IMAGE_SIZE = 512  
-OUTPUT_DIR = "outputs" #replace with "C:\path\to\savefolder" if desired.
+OUTPUT_DIR = "outputs" # replace with "C:\path\to\savefolder" if desired.
 VAE_SCALE_FACTOR = 8
 
 global pipe
 global current_model
 
+# blame Claude!
 pipe = None
 current_model = None
 global_image = None
@@ -138,14 +130,14 @@ def init(model_selection, progress=gr.Progress()):
                 ).to(DEVICE)
                 
                 progress(0.9, desc="Setting up scheduler")
-                pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)
+                pipe.scheduler = TCDScheduler.from_config(pipe.scheduler.config)  # todo maybe
                 
                 # if is_xformers_available():
                     # pipe.enable_xformers_memory_efficient_attention()
                 
                 current_model = model_selection
                 progress(1.0, desc="Model loading complete")
-                return f"Model {model_selection} loaded successfully with optimizations for lower VRAM usage."
+                return f"Model {model_selection} loaded successfully."
             except Exception as e:
                 return f"Error loading model {model_selection}: {str(e)}"
         else:
@@ -239,9 +231,8 @@ def fill_image(prompt, image, model_selection, guidance_scale, steps, paste_back
     finally:
         cleanup_tensors()
     
-
+# Clear CUDA cache
 def cleanup_tensors():
-    # Clear CUDA cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
@@ -730,6 +721,7 @@ with gr.Blocks(css=css) as demo:
             allow_preview=True,
             preview=False,
             show_download_button=False,
+            interactive=False,
         )
         
     with gr.Row():

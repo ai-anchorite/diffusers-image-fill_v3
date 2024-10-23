@@ -44,7 +44,11 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a hre
 ## 🖥️ System Requirements & Important Notes
 
 ~~Definitely in Beta mode atm.~~
-I'm going to start over from scratch.  
+I'm going to start over from scratch.
+
+If you manage to get an error on first image generation after install, or when likewise downloading a new checkpoint, restart the app. I think Gradio sometimes get bored waiting and loses the input image.  It's quick after the 1st generation, and should stay quick when changing between the three apps.
+
+Don't forget to refresh the UI when switching between apps!
 
 ### Hardware & Storage:
 - 32GB RAM for comfortable operation. I wouldn't try with 16GB system RAM.
@@ -64,6 +68,7 @@ If you already have Diffusers Image Fill installed in Pinokio:
    - `app.py`
    - `app-outpaint.py`
    - `app.zoom.py`
+   - `README.md`
      
  2. These files will overwrite existing ones. No additional installation required.
 

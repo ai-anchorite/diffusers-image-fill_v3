@@ -8,7 +8,7 @@ a Pinokio install script:   [pinokio.computer](https://pinokio.computer/) <a hre
     <td width="75%" style="vertical-align: top; padding-top: 0;">
       <h2 style="margin-top: 0; margin-bottom: 20px; font-size: 24px;">🚀 3 Apps in 1!</h2>
     <p style="margin-top: 0; margin-bottom: 15px;">
-  Three diffusers apps combining the speed of SDXL lightning (RealViz5) with the precision of ControlNetPlus Promax
+  Three diffusers apps combining the speed of SDXL lightning (RealVisXL 5) with the precision of ControlNetPlus Promax
   </p>
   
   <p style="margin-bottom: 20px;">

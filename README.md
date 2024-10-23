@@ -64,6 +64,7 @@ If you already have Diffusers Image Fill installed in Pinokio:
    - `app.py`
    - `app-outpaint.py`
    - `app.zoom.py`
+   - `README.md`
      
  2. These files will overwrite existing ones. No additional installation required.
 

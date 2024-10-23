@@ -22,7 +22,7 @@ from PIL import Image
 DEVICE = devicetorch.get(torch)
 
 MODELS = {
-        "RealVisXL V5 Lightning": {
+        "RealVisXL V5.0 Lightning": {
         "path": "SG161222/RealVisXL_V5.0_Lightning",
         "default_steps": 6,
         "max_steps": 16,
